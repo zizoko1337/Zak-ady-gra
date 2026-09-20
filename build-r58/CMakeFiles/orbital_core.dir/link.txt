@@ -1,0 +1,2 @@
+C:\Users\STACJO~1\Desktop\ZAKADY~1\tools\mingw64\bin\ar.exe qc liborbital_core.a CMakeFiles/orbital_core.dir/src/game.cpp.obj CMakeFiles/orbital_core.dir/src/feedback.cpp.obj
+C:\Users\STACJO~1\Desktop\ZAKADY~1\tools\mingw64\bin\ranlib.exe liborbital_core.a

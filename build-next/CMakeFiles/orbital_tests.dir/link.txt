@@ -1,0 +1,3 @@
+C:\Users\STACJO~1\Desktop\ZAKADY~1\tools\cmake-4.4.3-windows-x86_64\bin\cmake.exe -E rm -f CMakeFiles\orbital_tests.dir/objects.a
+C:\Users\STACJO~1\Desktop\ZAKADY~1\tools\mingw64\bin\ar.exe qc CMakeFiles\orbital_tests.dir/objects.a @CMakeFiles\orbital_tests.dir\objects1.rsp
+C:\Users\STACJO~1\Desktop\ZAKADY~1\tools\mingw64\bin\c++.exe -O3 -DNDEBUG -static -static-libgcc -static-libstdc++ -Wl,--whole-archive CMakeFiles\orbital_tests.dir/objects.a -Wl,--no-whole-archive -o orbital_tests.exe -Wl,--out-implib,liborbital_tests.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\orbital_tests.dir\linkLibs.rsp

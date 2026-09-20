@@ -1,0 +1,11 @@
+# Hashes of file build rules.
+ad19deb6e0d6db420f387e28291efa3c C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-build
+f4d89aa066c1649c7275c171f86b76bb C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-configure
+a4ead7ed0a5688d8893cb58c87fefd72 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-download
+61566f64e9f2150b4140a4ccc47ea641 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-install
+0ca618ec1746edc350cafce97e2c02bc C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-mkdir
+45e026c73a6fe0a6eaeba9e13be9d370 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-patch
+67aed2f0ca3aa7a2c7da1fc63148c916 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-test
+e0f5a377c47aec15441b2bd39e211e8b C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r52/_deps/box2d-subbuild/box2d-populate-prefix/src/box2d-populate-stamp/box2d-populate-update
+d3907878a1ce8bcb9e06036212f8ed14 CMakeFiles/box2d-populate
+28aa66c34f00bfefe5b4064cad6829e8 CMakeFiles/box2d-populate-complete

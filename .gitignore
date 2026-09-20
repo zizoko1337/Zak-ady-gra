@@ -1,0 +1,10 @@
+/build/
+/build-update/
+/tools/
+/vendor/
+/screenshots/
+/save.json
+/save.json.tmp
+/save.json.bak
+/settings.json
+*.log

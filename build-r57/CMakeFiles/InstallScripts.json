@@ -1,0 +1,14 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/cmake_install.cmake",
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/_deps/raylib-build/cmake_install.cmake",
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/_deps/raylib-build/raylib/cmake_install.cmake",
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/_deps/raylib-build/raylib/external/glfw/cmake_install.cmake",
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/_deps/raylib-build/raylib/external/glfw/src/cmake_install.cmake",
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/_deps/box2d-build/cmake_install.cmake",
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/_deps/box2d-build/src/cmake_install.cmake",
+		"C:/Users/STACJO~1/Desktop/ZAKADY~1/build-r57/_deps/json-build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
