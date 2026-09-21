@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "challenges": [
+    {
+      "id": "challenge.first_spark",
+      "name": "First Spark",
+      "description": "Choose one ball and defeat a freshly generated rival worth no more than 100 balance points.",
+      "color": "red",
+      "branch": "START",
+      "prerequisites": [],
+      "unlock_cost": 0,
+      "required_balls": 1,
+      "map": {"x": 0, "y": 0},
+      "encounter": {
+        "type": "duel",
+        "arena_id": "arena.rectangle",
+        "arena_effect": "",
+        "time_limit": 90,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "random_rival", "kind": "generated_fighter", "team": "enemy", "max_points": 100, "position": [130, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.first_2v2",
+      "name": "First 2v2",
+      "description": "Bring two owned balls into a true team fight against two predefined rivals worth about 85 points each.",
+      "color": "blue",
+      "branch": "GROUP FIGHTS",
+      "prerequisites": ["challenge.first_spark"],
+      "unlock_cost": 1000,
+      "required_balls": 2,
+      "map": {"x": 0, "y": -320},
+      "encounter": {
+        "type": "teamfight",
+        "arena_id": "arena.hexagon",
+        "arena_effect": "",
+        "time_limit": 120,
+        "objective": {"type": "defeat_all", "target": 2},
+        "actors": [
+          {"id": "vanguard", "display_name": "VANGUARD", "kind": "custom", "team": "enemy", "seed": 42001, "position": [130, -55], "loadout": ["weapon.sword", "weapon.bow", "ability.regen", "stat.slow", "stat.berserk"]},
+          {"id": "skirmisher", "display_name": "SKIRMISHER", "kind": "custom", "team": "enemy", "seed": 42002, "position": [130, 55], "loadout": ["weapon.spear", "weapon.bouncy_ball", "ability.dodge", "stat.hp_plus", "stat.large"]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.small_beast",
+      "name": "The Small Beast",
+      "description": "Hunt a Wild Dog: a brown beast that deals 10 collision damage and dashes every two seconds.",
+      "color": "green",
+      "branch": "BEASTS",
+      "prerequisites": ["challenge.first_spark"],
+      "unlock_cost": 1000,
+      "required_balls": 1,
+      "map": {"x": 304, "y": -99},
+      "encounter": {
+        "type": "beast_hunt",
+        "arena_id": "arena.diamond",
+        "arena_effect": "",
+        "time_limit": 90,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "wild_dog", "display_name": "WILD DOG", "kind": "beast", "team": "enemy", "seed": 43001, "position": [130, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.dps_check",
+      "name": "DPS Check",
+      "description": "Deal 200 damage in 60 seconds to the stationary, harmless dummy at the centre of a circular arena.",
+      "color": "purple",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.first_spark"],
+      "unlock_cost": 1000,
+      "required_balls": 1,
+      "map": {"x": 188, "y": 259},
+      "encounter": {
+        "type": "damage_race",
+        "arena_id": "arena.circle",
+        "arena_effect": "",
+        "time_limit": 60,
+        "objective": {"type": "deal_damage", "target": 200},
+        "actors": [
+          {"id": "damage_dummy", "display_name": "DAMAGE DUMMY", "kind": "dummy", "team": "enemy", "seed": 44001, "position": [0, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.first_duel",
+      "name": "One on One",
+      "description": "The first dedicated duel path: one owned ball against a fixed 85-point arena specialist.",
+      "color": "orange",
+      "branch": "DUELS",
+      "prerequisites": ["challenge.first_spark"],
+      "unlock_cost": 1000,
+      "required_balls": 1,
+      "map": {"x": -188, "y": 259},
+      "encounter": {
+        "type": "duel",
+        "arena_id": "arena.octagon",
+        "arena_effect": "",
+        "time_limit": 90,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "ring_ace", "display_name": "RING ACE", "kind": "custom", "team": "enemy", "seed": 45001, "position": [130, 0], "loadout": ["weapon.sword", "weapon.shuriken", "ability.shield", "stat.fast", "stat.bad_aim"]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.twinblade_titan",
+      "name": "Twinblade Titan",
+      "description": "Deploy three owned balls against a 500 HP boss carrying two katanas and a dash.",
+      "color": "yellow",
+      "branch": "BOSSES",
+      "prerequisites": ["challenge.first_spark"],
+      "unlock_cost": 1000,
+      "required_balls": 3,
+      "map": {"x": -304, "y": -99},
+      "encounter": {
+        "type": "boss",
+        "arena_id": "arena.circle",
+        "arena_effect": "",
+        "time_limit": 150,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "twinblade_titan", "display_name": "TWINBLADE TITAN", "kind": "boss", "team": "enemy", "seed": 46001, "position": [100, 0], "hp_multiplier": 5, "size_multiplier": 1.35, "loadout": ["weapon.katana", "weapon.katana", "ability.dash"]}
+        ],
+        "arena_objects": []
+      }
+    }
+  ]
+}

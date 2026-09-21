@@ -1,5 +1,45 @@
 @echo off
 cd /d "%~dp0"
+if exist "build-r70\OrbitalOdds.exe" (
+    start "" "build-r70\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r69\OrbitalOdds.exe" (
+    start "" "build-r69\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r68\OrbitalOdds.exe" (
+    start "" "build-r68\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r67\OrbitalOdds.exe" (
+    start "" "build-r67\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r66\OrbitalOdds.exe" (
+    start "" "build-r66\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r65\OrbitalOdds.exe" (
+    start "" "build-r65\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r64\OrbitalOdds.exe" (
+    start "" "build-r64\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r63\OrbitalOdds.exe" (
+    start "" "build-r63\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r62\OrbitalOdds.exe" (
+    start "" "build-r62\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r61\OrbitalOdds.exe" (
+    start "" "build-r61\OrbitalOdds.exe"
+    exit /b
+)
 if exist "build-r60\OrbitalOdds.exe" (
     start "" "build-r60\OrbitalOdds.exe"
     exit /b

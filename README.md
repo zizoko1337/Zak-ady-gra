@@ -16,11 +16,15 @@ Interfejs, wyposażenie, zasady i komunikaty gry są teraz w języku angielskim.
 
 ## Uruchomienie
 
-Kliknij **`Uruchom.bat`**. Gotowa gra znajduje się w `build/OrbitalOdds.exe`. Plik `data/catalog.json` musi pozostać w folderze projektu. Do grania nie jest potrzebny internet.
+Kliknij **`Uruchom.bat`**. Skrypt wybiera najnowszą sprawdzoną kompilację (obecnie `build-r70/OrbitalOdds.exe`). Pliki z folderu `data/` muszą pozostać w folderze projektu. Do grania nie jest potrzebny internet.
 
 Startujesz z 1000 monet. Wybierz zawodnika, ustaw stawkę i kliknij **Place Bet & Fight**. Wypłata przy kursie 1,90 wynosi 190 monet za zakład 100 monet, czyli 90 monet zysku. Kurs jest stały, a nie obliczany z prawdopodobieństwa wygranej. Remis zwraca stawkę.
 
 Zakładka **My Collection** pozwala odblokować do 12 miejsc na własne kulki. Kolejne miejsca kosztują 1000, 2000, 4000 monet itd. **Ball Market** przechowuje trzy oferty, które można dokładnie obejrzeć i kupić; odświeżenie wszystkich ofert kosztuje 1000 monet. Kolekcja i rynek zapisują się w `save.json` i pozostają po rozpoczęciu nowego sezonu. Przycisk deweloperski **Add 10k** można wyłączyć przez ustawienie `ShowDebugAddCoins` na `false` w `src/main.cpp`.
+
+Wszystkie kulki należące do gracza oraz oferty w Ball Market mają zielony kolor drużyny. Zakładka **Challenges** przedstawia rozgałęzioną mapę wyzwań. Czerwony węzeł **First Spark** jest początkiem pięciu ścieżek: **Group Fights**, **Beasts**, **Trials**, **Duels** i **Bosses**. Każdy dalszy węzeł wymaga ukończenia poprzedniego oraz opłacenia kosztu odblokowania. Po wybraniu wymaganych kulek przycisk **Start Challenge** uruchamia walkę bez zakładu; ukończenie zapisuje się automatycznie.
+
+Mapa jest definiowana w `data/challenges.json`. Pięć pierwszych ścieżek otacza centralny węzeł **First Spark**. Mapę można złapać lewym przyciskiem w dowolnym miejscu i przeciągać; krótkie kliknięcie bez ruchu wybiera węzeł. Działają też prawy i środkowy przycisk, kółko oraz **− / FIT / +**. Panel wyzwania pokazuje wszystkich przeciwników: losowi mają podany limit punktów, a stałe postacie, bestie, kukły i bossowie otwierają pełny inspektor statystyk i wyposażenia. Ścieżka Trials rozgałęzia się po pierwszym DPS Check na **Mouse Invasion** oraz **DPS Check: 300**. Mouse Invasion trwa 60 sekund na prostokątnej arenie, tworzy jedną wrogą mysz na sekundę i zatrzymuje falę przy 20 aktywnych myszach; w odróżnieniu od myszy przywołanych fletem te myszy są wybierane jako cele broni dystansowych. Symulacja obsługuje wiele walczących, drużynowe wybieranie celu i brak friendly fire. Stan odblokowania i ukończenia zapisuje się w `save.json`.
 
 ## Co zawiera prototyp
 
@@ -128,11 +132,12 @@ ctest --test-dir build -C Release --output-on-failure
 
 CMake korzysta z bibliotek w `vendor/`; jeśli ich nie ma, pobiera przypięte wersje z oficjalnych repozytoriów. Wymagane są biblioteki systemowe potrzebne raylib dla danego systemu. Interfejs używa systemowej czcionki Segoe UI na Windows, DejaVu Sans na Linux lub Arial na macOS; bez nich działa czcionka zastępcza z ograniczonym zestawem znaków.
 
-`build/OrbitalOdds.exe --smoke` renderuje 10 ekranów do `build/smoke/`: przygotowanie, 3 etapy odliczania, FIGHT!, walkę, wynik, katalog, zestaw wszystkich stylów twarzy i kapeluszy (`styles.png`) oraz zasady. Używa odrębnego portfela testowego. Sprawdza zatrzymanie fizyki podczas odliczania, pauzę, czas odliczania przy 16×, pojedyncze rozliczenie zakładu i odtwarzanie dźwięku przez backend (z wyciszonym wyjściem). Zestaw testów bez okna obejmuje dodatkowo próbki wszystkich dźwięków, 1000 losowań wyglądu, rozliczenia, zapis, pociski, zdolności, remisy, walidację katalogu oraz 150 losowych walk.
+`build-r70/OrbitalOdds.exe --smoke` renderuje ekrany kontrolne do `build/smoke/`, w tym kolekcję i jej popover statystyk, inspekcję kulki, mapę wyzwań, popovery składu i bossa, inspektor przeciwnika oraz pełny przebieg challenge od odliczania do wyniku. Używa odrębnego portfela testowego. Sprawdza zatrzymanie fizyki podczas odliczania, pauzę, czas odliczania przy 16×, pojedyncze rozliczenie zakładu i odtwarzanie dźwięku przez backend (z wyciszonym wyjściem). Zestaw testów bez okna obejmuje dodatkowo dane pięciu ścieżek, walkę 2v2, Wild Doga, oba DPS Checki, Mouse Invasion wraz z atakami dystansowymi i białymi, pojedynek 85 pkt, Twinblade Titana oraz Ricochet Behemotha.
 
 ## Pliki projektu
 
 - `data/catalog.json` — źródło danych i balansu.
+- `data/challenges.json` — graf mapy, koszty, wymagane składy oraz definicje encounterów.
 - `src/game.hpp`, `src/game.cpp` — losowanie, fizyka, wyposażenie, portfel i zapis.
 - `src/main.cpp` — interfejs i rysowanie gry.
 - `src/feedback.hpp`, `src/feedback.cpp` — niezależne losowanie wyglądu, stan odliczania i synteza dźwięków.

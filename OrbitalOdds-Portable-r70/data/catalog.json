@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "rules": {
+    "starting_coins": 1000,
+    "payout_multiplier": 1.9,
+    "round_limit_seconds": 180,
+    "sudden_death_seconds": 0,
+    "sudden_death_dps": 0,
+    "base_hp": 100,
+    "base_speed": 165,
+    "base_radius": 18,
+    "contact_damage": 2,
+    "weapon_slots": 2,
+    "ability_slots": 1,
+    "modifier_slots": 2,
+    "budget_min": 75,
+    "budget_max": 115,
+    "balance_tolerance": 5,
+    "candidate_count": 400
+  },
+  "items": [
+    {"id":"weapon.sword","name":"Orbital Sword","category":"weapon","effect":"sword","melee_class":"medium","points":32,"description":"A medium blade orbits the fighter and strikes at close range.","params":{"damage":17,"reach":53,"rotation_speed":3.5,"hit_cooldown":0.6}},
+    {"id":"weapon.bow","name":"Bow","category":"weapon","effect":"bow","points":25,"description":"Fires an aimed arrow every 1.5 seconds.","params":{"damage":12,"cooldown":1.5,"projectile_speed":340,"projectile_radius":3}},
+    {"id":"weapon.pistol","name":"Heavy Pistol","category":"weapon","effect":"pistol","points":28,"description":"One heavy round. Slow fire rate, massive damage.","params":{"damage":40,"cooldown":10,"projectile_speed":620,"projectile_radius":5}},
+    {"id":"weapon.mines","name":"Minelayer","category":"weapon","effect":"mine","points":26,"description":"Drops a compact mine every 5 seconds. Explodes in a small area.","params":{"damage":20,"cooldown":5,"trigger_radius":16,"blast_radius":38,"arm_time":0.7,"lifetime":20}},
+    {"id":"weapon.scatter","name":"Scattergun","category":"weapon","effect":"shotgun","points":30,"description":"Fires three pellets in a spread every 3 seconds.","params":{"damage":8,"cooldown":3,"projectile_speed":290,"projectile_radius":4,"spread":0.26}},
+    {"id":"weapon.spear","name":"Long Spear","category":"weapon","effect":"sword","melee_class":"light","points":34,"description":"A light spear with longer reach and a slower orbit.","params":{"damage":21,"reach":78,"rotation_speed":1.8,"hit_cooldown":0.9}},
+    {"id":"weapon.hammer","name":"Orbit Hammer","category":"weapon","effect":"sword","melee_class":"heavy","points":37,"description":"A heavy hammer that can knock fighters into a wall stun.","params":{"damage":25,"reach":50,"rotation_speed":1.5,"hit_cooldown":1}},
+    {"id":"weapon.dagger","name":"Orbit Dagger","category":"weapon","effect":"sword","melee_class":"light","points":26,"description":"A short, light blade that circles extremely fast.","params":{"damage":12,"reach":36,"rotation_speed":7.2,"hit_cooldown":0.45}},
+    {"id":"weapon.orbit_shield","name":"Orbit Shield","category":"weapon","effect":"sword","melee_class":"heavy","points":26,"description":"A slow shield that deflects projectiles and other melee weapons. Mines and wall spikes ignore it.","params":{"damage":0.1,"reach":50,"rotation_speed":0.8,"hit_cooldown":1}},
+    {"id":"weapon.poison_dart","name":"Poison Dart","category":"weapon","effect":"poison_dart","points":29,"description":"Deals exactly 1 damage on hit, then adds 1 poison damage per second until the round ends.","params":{"damage":1,"cooldown":2.6,"projectile_speed":440,"projectile_radius":3}},
+    {"id":"weapon.shuriken","name":"Shuriken","category":"weapon","effect":"shuriken","points":27,"description":"Throws every 2 seconds. A hit shortens its next throw by 1 second.","params":{"damage":11,"cooldown":2,"projectile_speed":390,"projectile_radius":4}},
+    {"id":"weapon.katana","name":"Orbit Katana","category":"weapon","effect":"sword","melee_class":"light","points":38,"description":"A long light blade with Spear damage and a 50% chance to deflect a projectile at the enemy.","params":{"damage":21,"reach":74,"rotation_speed":2.25,"hit_cooldown":0.9}},
+    {"id":"weapon.scythe","name":"Orbit Scythe","category":"weapon","effect":"sword","melee_class":"medium","points":40,"description":"A long medium scythe with Katana speed. Each hit deals 15 damage and restores 10 HP.","params":{"damage":15,"reach":78,"rotation_speed":2.25,"hit_cooldown":0.9,"lifesteal":10}},
+    {"id":"weapon.flute","name":"Pied Piper Flute","category":"weapon","effect":"flute","points":36,"description":"Every 8 seconds, calls five 1-HP mice from behind the fighter. Each mouse bites the enemy for 5 damage and remains until defeated or the round ends.","params":{"damage":5,"cooldown":8,"count":5,"mouse_hp":1,"mouse_radius":7,"mouse_speed":165,"bite_cooldown":2}},
+    {"id":"weapon.bouncy_ball","name":"Bouncy Ball","category":"weapon","effect":"bouncy_ball","points":18,"description":"Throws one very fast 7-damage ball every 3 seconds. It ricochets at natural angles until it naturally returns; a shield or Katana changes its colour and sends one hit back at its prior holder.","params":{"damage":7,"cooldown":3,"projectile_speed":650,"projectile_radius":6}},
+    {"id":"weapon.boomerang","name":"Boomerang","category":"weapon","effect":"boomerang","points":22,"description":"Throws a slowly spinning boomerang every 4 seconds. Wall impacts redirect it toward its owner while a gentle pull curves it back.","params":{"damage":14,"cooldown":4,"projectile_speed":360,"projectile_radius":6,"return_pull":260}},
+    {"id":"ability.spikes","name":"Spiked Rebounds","category":"ability","effect":"spikes","points":22,"description":"Every wall bounce leaves a temporary spike.","params":{"damage":8,"radius":18,"lifetime":15,"hit_cooldown":0.8}},
+    {"id":"ability.spiked_skin","name":"Spiked Skin","category":"ability","effect":"spiked_skin","points":10,"description":"Grows spikes around the fighter. Direct fighter contact deals 10 damage instead of the normal 2.","params":{}},
+    {"id":"ability.dash","name":"Dash","category":"ability","effect":"dash","points":18,"description":"Accelerates toward the opponent every 4 seconds.","params":{"cooldown":4,"duration":0.38,"speed_multiplier":2.6}},
+    {"id":"ability.dodge","name":"Dodge","category":"ability","effect":"dodge","points":22,"description":"Sidesteps nearby incoming projectiles with brief invulnerability.","params":{"cooldown":4,"duration":0.24,"speed_multiplier":2.8,"trigger_distance":95}},
+    {"id":"ability.regen","name":"Regeneration","category":"ability","effect":"regen","points":20,"description":"Restores 5 health every 4 seconds.","params":{"cooldown":4,"heal":5}},
+    {"id":"ability.shield","name":"Pulse Shield","category":"ability","effect":"shield","points":20,"description":"Periodically generates a damage-absorbing shield.","params":{"cooldown":7,"duration":2,"absorb":22}},
+    {"id":"ability.vampire","name":"Lifesteal","category":"ability","effect":"vampire","points":18,"description":"Heals for a portion of damage dealt.","params":{"lifesteal":0.22}},
+    {"id":"ability.careful_steps","name":"Lucky","category":"ability","effect":"careful_steps","points":15,"description":"60% chance to avoid placed hazards, slowing tape, and Bouncy Ball hits, plus 10% chance to dodge other ranged attacks.","params":{}},
+    {"id":"ability.slowing_tape","name":"Slowing Tape","category":"ability","effect":"tape","points":20,"description":"Starts at a 15% wall-bounce chance, rising by 1% after each miss. It remains until crossed, then slows an enemy to 20% speed for 3 seconds.","params":{"chance":0.15,"duration":3,"slow_multiplier":0.2}},
+    {"id":"ability.damage_field","name":"Damage Field","category":"ability","effect":"damage_field","points":15,"description":"Draws a transparent team-colour line between wall bounces. When three or more lines close a shape, enemies inside take 25 damage. The next wall bounce starts a new field.","params":{}},
+    {"id":"ability.minion","name":"Pocket Minion","category":"ability","effect":"minion","points":36,"description":"Brings a small 40-HP helper with one random weapon.","params":{"hp":40,"radius":11,"speed":135}},
+    {"id":"stat.hp_double","name":"Double Health","category":"modifier","effect":"stats","group":"hp","points":32,"description":"Health x2.","params":{"hp_multiplier":2}},
+    {"id":"stat.hp_plus","name":"Endurance","category":"modifier","effect":"stats","group":"hp","points":13,"description":"Health ×1.4.","params":{"hp_multiplier":1.4}},
+    {"id":"stat.glass","name":"Glass Cannon","category":"modifier","effect":"stats","group":"hp","points":6,"description":"Health ×0.7, damage ×1.5.","params":{"hp_multiplier":0.7,"damage_multiplier":1.5}},
+    {"id":"stat.fast","name":"Speedster","category":"modifier","effect":"stats","group":"speed","points":14,"description":"Speed ×1.4.","params":{"speed_multiplier":1.4}},
+    {"id":"stat.slow","name":"Slowpoke","category":"modifier","effect":"stats","group":"speed","points":-9,"description":"Speed ×0.75.","params":{"speed_multiplier":0.75}},
+    {"id":"stat.small","name":"Small Target","category":"modifier","effect":"stats","group":"size","points":12,"description":"Radius ×0.7. Harder to hit.","params":{"radius_multiplier":0.7}},
+    {"id":"stat.large","name":"Big Ball","category":"modifier","effect":"stats","group":"size","points":-6,"description":"Radius ×1.4. More mass, a bigger target.","params":{"radius_multiplier":1.4}},
+    {"id":"stat.armor","name":"Armor","category":"modifier","effect":"stats","group":"armor","points":16,"description":"Reduces incoming damage by 20%.","params":{"armor":0.2}},
+    {"id":"stat.power","name":"Power Up","category":"modifier","effect":"stats","group":"damage","points":17,"description":"All weapon damage ×1.25.","params":{"damage_multiplier":1.25}}
+    ,{"id":"stat.berserk","name":"Berserk","category":"modifier","effect":"stats","group":"berserk","points":19,"description":"Below 20% health, all damage is doubled.","params":{}}
+    ,{"id":"stat.crit_striker","name":"Crit Striker","category":"modifier","effect":"crit","group":"crit","points":20,"description":"20% chance for an attack to deal double damage. Poison ticks can also crit.","params":{"chance":0.2}}
+    ,{"id":"stat.slow_swings","name":"Slow Swings","category":"modifier","effect":"slow_swings","group":"swing_speed","points":-10,"description":"Melee weapons rotate 30% slower.","params":{}}
+    ,{"id":"stat.fast_swings","name":"Faster Swings","category":"modifier","effect":"fast_swings","group":"swing_speed","points":24,"description":"Doubles the rotation speed of all melee weapons.","params":{}}
+    ,{"id":"stat.slow_reload","name":"Slow Reload","category":"modifier","effect":"slow_reload","group":"reload","points":-9,"description":"Adds 1 second to every weapon reload.","params":{}}
+    ,{"id":"stat.fast_reload","name":"Fast Reload","category":"modifier","effect":"fast_reload","group":"reload","points":14,"description":"Reduces every weapon reload by 35%.","params":{}}
+    ,{"id":"stat.bad_aim","name":"Bad Aim","category":"modifier","effect":"bad_aim","group":"aim","points":-8,"description":"Each shot picks a random aim offset from -5 to +5 degrees.","params":{}}
+    ,{"id":"stat.combo_master","name":"Combo Master","category":"modifier","effect":"combo_master","group":"combo","points":23,"description":"A hit within 2.5 seconds of your last hit deals 30% more damage. Poison is excluded.","params":{}}
+  ],
+  "arenas": [
+    {"id":"arena.rectangle","name":"Rectangle","shape":"rectangle","weight":3,"width":580,"height":400},
+    {"id":"arena.hexagon","name":"Hexagon","shape":"polygon","sides":6,"weight":2,"width":580,"height":420},
+    {"id":"arena.octagon","name":"Octagon","shape":"polygon","sides":8,"weight":2,"width":580,"height":420},
+    {"id":"arena.circle","name":"Circle","shape":"polygon","sides":48,"weight":2,"width":430,"height":430},
+    {"id":"arena.diamond","name":"Diamond","shape":"polygon","sides":4,"weight":1,"width":590,"height":430}
+  ]
+}

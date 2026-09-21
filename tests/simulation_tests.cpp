@@ -22,7 +22,7 @@ static Match fixture(const Catalog& c) {
     m.arena=c.arenas[0];
     for(int k=0;k<2;++k) {
         Fighter f; f.name=k==0?"A":"B"; f.position={k==0?-100.0f:100.0f,0}; f.previous=f.position;
-        f.speed=0; f.velocity={0,0}; f.hp=f.maxHp=100; m.fighters[k]=f;
+        f.speed=0; f.velocity={0,0}; f.hp=f.maxHp=100; f.team=k; m.fighters[k]=f;
     }
     return m;
 }
@@ -30,6 +30,19 @@ static void equip(Fighter& f,const Item& i) { f.items.push_back(i); f.cooldowns.
 int main(int argc,char** argv) {
     try {
         check(argc==2,"Expected catalog path"); Catalog c=Catalog::load(argv[1]);
+        ChallengeCatalog challenges=ChallengeCatalog::load(std::filesystem::path(argv[1]).parent_path()/"challenges.json",c);
+        check(challenges.challenges.size()==9 && challenges.find("challenge.first_spark") && challenges.find("challenge.first_2v2") && challenges.find("challenge.small_beast") && challenges.find("challenge.dps_check") && challenges.find("challenge.first_duel") && challenges.find("challenge.twinblade_titan") && challenges.find("challenge.ricochet_behemoth") && challenges.find("challenge.mouse_invasion") && challenges.find("challenge.dps_check_300"),"Challenge route definitions are missing");
+        check(challenges.find("challenge.first_2v2")->branch=="GROUP FIGHTS" && challenges.find("challenge.small_beast")->branch=="BEASTS" && challenges.find("challenge.dps_check")->branch=="TRIALS" && challenges.find("challenge.first_duel")->branch=="DUELS" && challenges.find("challenge.twinblade_titan")->branch=="BOSSES","Challenge paths are incorrect");
+        {
+            const auto& root=*challenges.find("challenge.first_spark"); float minX=root.mapX,maxX=root.mapX,minY=root.mapY,maxY=root.mapY; int spokes=0;
+            for(const auto& challenge:challenges.challenges) if(std::ranges::find(challenge.prerequisites,root.id)!=challenge.prerequisites.end()) {
+                ++spokes; minX=std::min(minX,challenge.mapX); maxX=std::max(maxX,challenge.mapX); minY=std::min(minY,challenge.mapY); maxY=std::max(maxY,challenge.mapY);
+            }
+            check(spokes==5 && minX<root.mapX-150 && maxX>root.mapX+150 && minY<root.mapY-150 && maxY>root.mapY+150,"Challenge paths should surround First Spark");
+        }
+        check(challenges.find("challenge.first_2v2")->requiredBalls==2 && challenges.find("challenge.dps_check")->objectiveTarget==200 && challenges.find("challenge.dps_check")->timeLimit==60 && challenges.find("challenge.twinblade_titan")->requiredBalls==3,"Challenge objectives are incorrect");
+        check(challenges.find("challenge.ricochet_behemoth")->prerequisites==std::vector<std::string>{"challenge.twinblade_titan"} && challenges.find("challenge.ricochet_behemoth")->branch=="BOSSES" && challenges.find("challenge.ricochet_behemoth")->arenaId=="arena.diamond" && challenges.find("challenge.ricochet_behemoth")->requiredBalls==3,"Ricochet Behemoth path or arena is incorrect");
+        check(challenges.find("challenge.mouse_invasion")->prerequisites==std::vector<std::string>{"challenge.dps_check"} && challenges.find("challenge.mouse_invasion")->objectiveType=="survive" && challenges.find("challenge.mouse_invasion")->arenaId=="arena.rectangle" && challenges.find("challenge.dps_check_300")->prerequisites==std::vector<std::string>{"challenge.dps_check"} && challenges.find("challenge.dps_check_300")->objectiveTarget==300,"Trials branches are incorrect");
         check(c.rules.limit==180 && c.rules.suddenDps==0,"Fights should draw after three minutes with no overtime damage");
         check(findItem(c,"weapon.pistol").get("damage")==40,"Heavy Pistol damage should be 40");
         check(findItem(c,"weapon.mines").get("damage")==20,"Minelayer damage should be nerfed to 20");
@@ -137,12 +150,97 @@ int main(int argc,char** argv) {
         int beforeRefresh=collection.coins; check(collection.refreshMarket({404,505,606}) && collection.coins==beforeRefresh-1000 && collection.marketBallSeeds[1]==505,"Market refresh failed");
         auto ownedBeforeSeason=collection.ownedBallSeeds; auto marketBeforeSeason=collection.marketBallSeeds; int slotsBeforeSeason=collection.collectionSlots;
         collection.resetSeason(1000); check(collection.coins==1000 && collection.wins==0 && collection.collectionSlots==slotsBeforeSeason && collection.ownedBallSeeds==ownedBeforeSeason && collection.marketBallSeeds==marketBeforeSeason,"New season erased collection progress");
+        Wallet challengeProgress; challengeProgress.coins=10000;
+        const auto& startChallenge=*challenges.find("challenge.first_spark"),&branchChallenge=*challenges.find("challenge.first_2v2");
+        check(!challengeProgress.unlockChallenge(branchChallenge),"Challenge unlocked before its prerequisite was completed");
+        check(challengeProgress.unlockChallenge(startChallenge) && challengeProgress.completeChallenge(startChallenge.id),"Starting challenge progress failed");
+        int beforeUnlock=challengeProgress.coins;
+        check(challengeProgress.unlockChallenge(branchChallenge) && challengeProgress.coins==beforeUnlock-branchChallenge.unlockCost,"Paid challenge unlock failed");
+        check(!challengeProgress.unlockChallenge(branchChallenge),"Challenge charged twice");
+        collection.unlockedChallenges=challengeProgress.unlockedChallenges; collection.completedChallenges=challengeProgress.completedChallenges;
         auto temp=std::filesystem::temp_directory_path()/"orbital-odds-test-save.json";
-        collection.save(temp); auto restored=Wallet::load(temp,1000); check(restored.coins==collection.coins && restored.collectionSlots==12 && restored.marketBallSeeds[2]==606,"Collection save roundtrip failed");
+        collection.save(temp); auto restored=Wallet::load(temp,1000); check(restored.coins==collection.coins && restored.collectionSlots==12 && restored.marketBallSeeds[2]==606 && restored.challengeCompleted("challenge.first_spark"),"Collection/challenge save roundtrip failed");
         payout.save(temp); restored=Wallet::load(temp,1000); check(restored.coins==payout.coins && restored.rounds==3,"Save roundtrip failed");
         payout.place(0,25); payout.save(temp); restored=Wallet::load(temp,1000);
         check(restored.coins==payout.coins && !restored.active && restored.losses==payout.losses+1,"Interrupted bet refunded");
         std::filesystem::remove(temp);
+        {
+            Match first=buildChallengeMatch(c,*challenges.find("challenge.first_spark"),{101},7001);
+            check(first.challenge && first.fighters.size()==2 && first.fighters[0].team==0 && first.fighters[1].team==1 && first.fighters[1].points<=100,"First Spark did not build a capped random duel");
+            Match teamfight=buildChallengeMatch(c,*challenges.find("challenge.first_2v2"),{101,202},7002);
+            int allies=0,enemies=0; for(const auto& fighter:teamfight.fighters) (fighter.team==0?allies:enemies)++;
+            check(teamfight.fighters.size()==4 && allies==2 && enemies==2 && teamfight.fighters[2].points==87 && teamfight.fighters[3].points==81,"First 2v2 did not create both predefined teams");
+            Rules teamRules=c.rules; teamRules.limit=5; teamRules.suddenDps=0; Simulation actual2v2(teamfight,teamRules); run(actual2v2);
+            check(actual2v2.winner>=-1 && actual2v2.winner<=1,"The 2v2 simulation did not produce a valid team result");
+            Match beast=buildChallengeMatch(c,*challenges.find("challenge.small_beast"),{101},7003);
+            check(beast.fighters.size()==2 && beast.fighters[1].actorKind=="wild_dog" && beast.fighters[1].contactDamage==10,"Wild Dog challenge actor is incorrect");
+            beast.fighters[0].position=beast.fighters[0].previous={0,0}; beast.fighters[0].velocity={}; beast.fighters[0].speed=0; beast.fighters[0].armor=0; beast.fighters[0].hp=beast.fighters[0].maxHp=100;
+            beast.fighters[1].position=beast.fighters[1].previous={0,0}; beast.fighters[1].velocity={}; beast.fighters[1].speed=0;
+            Rules contactRules=c.rules; contactRules.contactDamage=0; contactRules.suddenDps=0; Simulation dogContact(beast,contactRules); dogContact.step();
+            check(dogContact.match.fighters[0].hp==90,"Wild Dog collision did not deal 10 damage");
+            beast=buildChallengeMatch(c,*challenges.find("challenge.small_beast"),{101},7003);
+            Rules beastRules=c.rules; beastRules.limit=10; beastRules.suddenDps=0; Simulation dogFight(beast,beastRules);
+            for(int tick=0;tick<245;++tick) dogFight.step();
+            check(std::ranges::any_of(dogFight.events,[](const Event& event){ return event.text=="WILD DOG DASH!"; }),"Wild Dog did not dash every two seconds");
+            Match dps=buildChallengeMatch(c,*challenges.find("challenge.dps_check"),{101},7004);
+            check(dps.arena.id=="arena.circle" && dps.fighters[1].stationary && dps.fighters[1].harmless && dps.fighters[1].position.x==0 && dps.fighters[1].position.y==0,"DPS Check dummy or arena is incorrect");
+            Rules dpsRules=c.rules; dpsRules.limit=60; dpsRules.suddenDps=0; Simulation damageRace(dps,dpsRules);
+            for(int tick=0;tick<60;++tick) damageRace.step();
+            check(damageRace.match.fighters[1].position.x==0 && damageRace.match.fighters[1].position.y==0,"DPS Check dummy moved away from the centre");
+            damageRace.match.fighters[0].damageDealt=200; damageRace.step();
+            check(damageRace.finished && damageRace.winner==0,"DPS Check did not complete at 200 damage");
+            Match dps300=buildChallengeMatch(c,*challenges.find("challenge.dps_check_300"),{101},7005);
+            check(dps300.objectiveTarget==300 && dps300.fighters[1].stationary && dps300.fighters[1].harmless,"DPS Check: 300 setup is incorrect");
+            Rules dps300Rules=c.rules; dps300Rules.limit=60; dps300Rules.suddenDps=0; Simulation damageRace300(dps300,dps300Rules);
+            damageRace300.match.fighters[0].damageDealt=299; damageRace300.step(); check(!damageRace300.finished,"DPS Check: 300 completed below its target");
+            damageRace300.match.fighters[0].damageDealt=300; damageRace300.step(); check(damageRace300.finished && damageRace300.winner==0,"DPS Check: 300 did not complete at 300 damage");
+            Match invasion=buildChallengeMatch(c,*challenges.find("challenge.mouse_invasion"),{101},7006);
+            check(invasion.mouseInvasion.enabled && invasion.mouseInvasion.interval==1 && invasion.mouseInvasion.maxCount==20 && invasion.mouseInvasion.hp==1 && invasion.mouseInvasion.damage==5,"Mouse Invasion setup is incorrect");
+            auto invasionController=std::ranges::find_if(invasion.fighters,[](const Fighter& fighter){ return fighter.actorKind=="mouse_spawner"; });
+            check(invasionController!=invasion.fighters.end() && invasionController->hidden && invasionController->untargetable && !invasionController->stationary && invasionController->speed==900,"Mouse Invasion controller is not a fast invisible spawner");
+            invasion.fighters[0].items.clear(); invasion.fighters[0].cooldowns.clear(); invasion.fighters[0].hitCooldowns.clear(); invasion.fighters[0].maxHp=invasion.fighters[0].hp=100000;
+            Rules invasionRules=c.rules; invasionRules.limit=60; invasionRules.suddenDps=0; Simulation mouseSurvival(invasion,invasionRules);
+            for(int tick=0;tick<119;++tick) mouseSurvival.step(); check(mouseSurvival.mice.empty(),"Mouse Invasion spawned before one second");
+            for(int tick=0;tick<2;++tick) mouseSurvival.step();
+            check(mouseSurvival.mice.size()==1 && mouseSurvival.mice[0].targetable && mouseSurvival.match.fighters[mouseSurvival.mice[0].owner].team==1,"First invasion mouse is missing or not targetable");
+            for(int tick=0;tick<24*120;++tick) mouseSurvival.step();
+            check(mouseSurvival.mice.size()==20,"Mouse Invasion did not stop at 20 active mice");
+            while(!mouseSurvival.finished) mouseSurvival.step(); check(mouseSurvival.winner==0,"Surviving Mouse Invasion for 60 seconds did not complete the challenge");
+            Match rangedInvasion=buildChallengeMatch(c,*challenges.find("challenge.mouse_invasion"),{101},7007);
+            rangedInvasion.fighters[0].items.clear(); rangedInvasion.fighters[0].cooldowns.clear(); rangedInvasion.fighters[0].hitCooldowns.clear(); equip(rangedInvasion.fighters[0],findItem(c,"weapon.bow"));
+            Simulation mouseTargeting(rangedInvasion,invasionRules); for(int tick=0;tick<121;++tick) mouseTargeting.step();
+            check(mouseTargeting.mice.size()==1,"Targeting test did not spawn an invasion mouse"); mouseTargeting.match.fighters[0].cooldowns[0]=0; mouseTargeting.step();
+            check(!mouseTargeting.projectiles.empty() && dot(normalized(mouseTargeting.projectiles.back().velocity),normalized(mouseTargeting.mice[0].position-mouseTargeting.match.fighters[0].position))>0.98f,"Ranged weapon did not aim at the invasion mouse");
+            Match meleeInvasion=buildChallengeMatch(c,*challenges.find("challenge.mouse_invasion"),{101},7009);
+            meleeInvasion.fighters[0].items.clear(); meleeInvasion.fighters[0].cooldowns.clear(); meleeInvasion.fighters[0].hitCooldowns.clear(); equip(meleeInvasion.fighters[0],findItem(c,"weapon.dagger"));
+            Simulation mouseMelee(meleeInvasion,invasionRules); for(int tick=0;tick<121;++tick) mouseMelee.step();
+            check(mouseMelee.mice.size()==1,"Melee targeting test did not spawn an invasion mouse");
+            auto& meleeFighter=mouseMelee.match.fighters[0]; meleeFighter.speed=0; meleeFighter.velocity={}; meleeFighter.meleeAngles[0]=0;
+            mouseMelee.mice[0].position=mouseMelee.mice[0].previous=meleeFighter.position+Vec{meleeFighter.radius+20,0}; mouseMelee.mice[0].speed=0; mouseMelee.mice[0].velocity={};
+            mouseMelee.step(); check(mouseMelee.mice.empty(),"Melee weapon did not damage an invasion mouse without a regular enemy present");
+            Match failedInvasion=buildChallengeMatch(c,*challenges.find("challenge.mouse_invasion"),{101},7008); Simulation mouseFailure(failedInvasion,invasionRules);
+            mouseFailure.match.fighters[0].hp=0; mouseFailure.step(); check(mouseFailure.finished && mouseFailure.winner==1,"Mouse Invasion did not fail when the player died");
+            Match duel=buildChallengeMatch(c,*challenges.find("challenge.first_duel"),{101},7005);
+            check(duel.fighters.size()==2 && duel.fighters[1].name=="RING ACE" && duel.fighters[1].points==85,"The first Duels challenge is not the predefined 85-point fight");
+            Match boss=buildChallengeMatch(c,*challenges.find("challenge.twinblade_titan"),{101,202,303},7006);
+            int bossAllies=0,bossEnemies=0; for(const auto& fighter:boss.fighters) (fighter.team==0?bossAllies:bossEnemies)++;
+            const Fighter& titan=boss.fighters.back();
+            int katanas=static_cast<int>(std::ranges::count_if(titan.items,[](const Item& item){ return item.id=="weapon.katana"; }));
+            check(boss.fighters.size()==4 && bossAllies==3 && bossEnemies==1 && titan.actorKind=="boss" && titan.name=="TWINBLADE TITAN","Boss challenge did not create a 3-versus-1 fight");
+            check(titan.hp==500 && titan.maxHp==500 && katanas==2 && titan.effect("dash"),"Twinblade Titan is missing 500 HP, two katanas, or dash");
+            Rules bossRules=c.rules; bossRules.limit=5; bossRules.suddenDps=0; Simulation bossFight(boss,bossRules); run(bossFight);
+            check(bossFight.winner>=-1 && bossFight.winner<=1,"The boss simulation did not produce a valid team result");
+            Match ricochetBoss=buildChallengeMatch(c,*challenges.find("challenge.ricochet_behemoth"),{101,202,303},7010);
+            int ricochetAllies=0,ricochetEnemies=0; for(const auto& fighter:ricochetBoss.fighters) (fighter.team==0?ricochetAllies:ricochetEnemies)++;
+            const Fighter& behemoth=ricochetBoss.fighters.back();
+            int bouncyBalls=static_cast<int>(std::ranges::count_if(behemoth.items,[](const Item& item){ return item.id=="weapon.bouncy_ball"; }));
+            bool berserk=std::ranges::any_of(behemoth.items,[](const Item& item){ return item.id=="stat.berserk"; });
+            check(ricochetBoss.arena.id=="arena.diamond" && ricochetBoss.fighters.size()==4 && ricochetAllies==3 && ricochetEnemies==1 && behemoth.actorKind=="boss" && behemoth.name=="RICOCHET BEHEMOTH","Ricochet Behemoth did not create a three-versus-one Diamond fight");
+            check(behemoth.hp==750 && behemoth.maxHp==750 && bouncyBalls==4 && berserk,"Ricochet Behemoth is missing 750 HP, four Bouncy Balls, or Berserk");
+            Simulation ricochetFight(ricochetBoss,bossRules); const auto& liveBehemoth=ricochetFight.match.fighters.back(); std::vector<float> ballDelays;
+            for(size_t slot=0;slot<liveBehemoth.items.size();++slot) if(liveBehemoth.items[slot].id=="weapon.bouncy_ball") ballDelays.push_back(liveBehemoth.cooldowns[slot]);
+            std::ranges::sort(ballDelays); check(ballDelays.size()==4 && std::abs(ballDelays[1]-ballDelays[0]-1)<0.01f && std::abs(ballDelays[2]-ballDelays[1]-1)<0.01f && std::abs(ballDelays[3]-ballDelays[2]-1)<0.01f,"Four duplicate Bouncy Balls are not staggered one second apart");
+        }
         // Relative swept collision: a very fast bullet hits even with both endpoints outside the target.
         {
             Match m=fixture(c); Simulation s(m,c.rules);
@@ -169,7 +267,7 @@ int main(int argc,char** argv) {
             Match m=fixture(c); equip(m.fighters[0],flute); Rules rules=c.rules; rules.contactDamage=0;
             Simulation s(m,rules); s.step();
             check(s.mice.size()==5,"Flute did not summon five mice");
-            for(const auto& mouse:s.mice) check(mouse.owner==0 && mouse.hp==1 && std::abs(length(mouse.velocity)-165)<0.01f && mouse.position.x<m.fighters[0].position.x,"Mouse spawn values or behind-summoner position are incorrect");
+            for(const auto& mouse:s.mice) check(mouse.owner==0 && mouse.hp==1 && !mouse.targetable && std::abs(length(mouse.velocity)-165)<0.01f && mouse.position.x<m.fighters[0].position.x,"Mouse spawn values, targeting rule, or behind-summoner position are incorrect");
             for(size_t n=1;n<s.mice.size();++n) s.mice[n].hp=0;
             s.mice[0].position=s.match.fighters[0].position; s.mice[0].previous=s.mice[0].position; s.mice[0].velocity={0,0}; s.step();
             check(s.match.fighters[0].hp==100,"Mouse damaged its summoner");

@@ -21,6 +21,7 @@ constexpr bool ShowDebugAddCoins=true;
 const Color Background{10,14,22,255},Panel{17,23,34,255},PanelAlt{23,31,44,255};
 const Color Border{40,52,69,255},Muted{135,152,173,255},White{234,241,249,255};
 const Color Accent{211,248,117,255},Cyan{76,217,242,255},Coral{255,126,144,255};
+const Color PlayerGreen{82,224,126,255};
 const Color Team[2]={Cyan,Coral};
 Font uiFont{},displayFont{}; Vector2 mouse{}; bool inputBlocked=false;
 AudioBank* audioBank=nullptr;
@@ -108,6 +109,7 @@ struct App {
     struct Impact { Vec position,direction; float age,total,strength; uint64_t seed; bool sparks; };
     std::filesystem::path root;
     Catalog catalog;
+    ChallengeCatalog challenges;
     Wallet wallet;
     Match preview;
     std::vector<Fighter> ownedBallCache;
@@ -115,23 +117,40 @@ struct App {
     std::unique_ptr<Simulation> sim;
     std::mt19937 random{std::random_device{}()};
     int selected=0,stake=100,speed=1,returned=0;
-    bool paused=false,catalogOpen=false,rulesOpen=false,collectionOpen=false,inspectionOpen=false;
+    bool paused=false,catalogOpen=false,rulesOpen=false,collectionOpen=false,challengesOpen=false,inspectionOpen=false;
+    bool challengeBattleOpen=false,challengeResultSaved=false;
     bool volumeDragging=false,stakeDragging=false;
     int catalogTab=0,catalogScroll=0,pendingRemove=-1,inspectionMarket=-1,inspectionOwned=-1;
     uint32_t inspectionSeed=0;
     Fighter inspectedBall;
+    Color inspectionColor=PlayerGreen;
+    bool inspectionChallengeEnemy=false;
+    int selectedChallenge=0;
+    std::vector<uint32_t> challengeSquadSeeds;
+    std::vector<Fighter> challengeEnemyPreview;
+    int challengeEnemyPreviewIndex=-1;
+    std::string activeChallengeId;
+    Vec challengeMapCamera{};
+    float challengeMapZoom=1;
+    bool challengeMapViewReady=false;
+    bool challengeMapDragMoved=false;
+    int challengeMapDragButton=-1,challengeMapPressedNode=-1;
+    Vector2 challengeMapDragPrevious{},challengeMapPressPosition{};
     double accumulator=0;
     Countdown countdown;
     std::array<Appearance,2> appearances{};
     std::vector<FloatingText> floating;
     std::vector<Impact> impacts;
-    std::array<float,2> messageCooldown{};
+    std::vector<float> messageCooldown=std::vector<float>(2);
     uint64_t lastEvent=0;
     float realClock=0,resultAge=0,hitStop=0,tiltTimer=0,tiltTotal=0,tiltKick=0,screenTilt=0;
     std::string error;
     const Item* hovered=nullptr;
-    explicit App(std::filesystem::path path):root(std::move(path)),catalog(Catalog::load(root/"data/catalog.json")),wallet(Wallet::load(root/"save.json",catalog.rules.startingCoins)) {
-        ensureMarket(); rebuildCollectionCache(); wallet.save(root/"save.json"); reroll();
+    bool ballPopoverActive=false;
+    Fighter ballPopoverFighter;
+    Color ballPopoverColor=PlayerGreen;
+    explicit App(std::filesystem::path path):root(std::move(path)),catalog(Catalog::load(root/"data/catalog.json")),challenges(ChallengeCatalog::load(root/"data/challenges.json",catalog)),wallet(Wallet::load(root/"save.json",catalog.rules.startingCoins)) {
+        ensureMarket(); ensureChallengeRoots(); rebuildCollectionCache(); wallet.save(root/"save.json"); reroll();
         if(audioBank && std::filesystem::exists(root/"settings.json")) {
             try {
                 std::ifstream input(root/"settings.json"); nlohmann::json settings; input>>settings;
@@ -154,13 +173,53 @@ struct App {
         if(wallet.marketInitialized) return;
         wallet.marketBallSeeds=freshMarketSeeds(); wallet.marketInitialized=true;
     }
+    void ensureChallengeRoots() {
+        for(const auto& challenge:challenges.challenges) if(challenge.prerequisites.empty() && !wallet.challengeUnlocked(challenge.id)) wallet.unlockChallenge(challenge);
+        selectedChallenge=std::clamp(selectedChallenge,0,static_cast<int>(challenges.challenges.size())-1);
+    }
     void rebuildCollectionCache() {
         ownedBallCache.clear(); ownedBallCache.reserve(wallet.ownedBallSeeds.size());
         for(uint32_t seed:wallet.ownedBallSeeds) ownedBallCache.push_back(generateBall(catalog,seed));
         for(size_t n=0;n<marketBallCache.size();++n) marketBallCache[n]=wallet.marketBallSeeds[n]?generateBall(catalog,wallet.marketBallSeeds[n]):Fighter{};
     }
-    void openInspector(const Fighter& fighter,uint32_t seed,int marketIndex=-1,int ownedIndex=-1) {
-        inspectedBall=fighter; inspectionSeed=seed; inspectionMarket=marketIndex; inspectionOwned=ownedIndex; inspectionOpen=true; pendingRemove=-1;
+    void openInspector(const Fighter& fighter,uint32_t seed,int marketIndex=-1,int ownedIndex=-1,bool challengeEnemy=false,Color color=PlayerGreen) {
+        inspectedBall=fighter; inspectionSeed=seed; inspectionMarket=marketIndex; inspectionOwned=ownedIndex; inspectionChallengeEnemy=challengeEnemy; inspectionColor=color; inspectionOpen=true; pendingRemove=-1;
+    }
+    void offerBallPopover(const Fighter& fighter,Rectangle area,Color color) {
+        if(inputBlocked || !inside(area)) return;
+        ballPopoverActive=true; ballPopoverFighter=fighter; ballPopoverColor=color;
+    }
+    void ballStatsPopover() {
+        if(!ballPopoverActive || catalogOpen || rulesOpen || inspectionOpen) return;
+        const auto& fighter=ballPopoverFighter;
+        float width=342,loadoutRows=std::max<size_t>(1,fighter.items.size());
+        float height=181+static_cast<float>(loadoutRows)*22;
+        float x=mouse.x+18,y=mouse.y+18;
+        if(x+width>Width-12) x=mouse.x-width-18;
+        if(y+height>Height-12) y=mouse.y-height-18;
+        x=std::clamp(x,12.0f,Width-width-12); y=std::clamp(y,88.0f,Height-height-12);
+        DrawRectangleRounded({x+5,y+7,width,height},0.05f,8,Color{0,0,0,125});
+        box({x,y,width,height},Color{12,18,28,250},ballPopoverColor,0.05f);
+        DrawRectangleRounded({x+1,y+1,width-2,4},0.8f,6,ballPopoverColor);
+        fitted(fighter.name+" "+fighter.title,x+17,y+15,width-34,16,White);
+        text(std::to_string(fighter.points)+" BALANCE PTS",x+17,y+43,10,ballPopoverColor);
+        DrawLineEx({x+17,y+66},{x+width-17,y+66},1,Border);
+        const std::array<std::pair<std::string,std::string>,4> stats={{{"HP",number(fighter.maxHp)},{"SIZE",number(fighter.radius,1)},{"SPEED",number(fighter.speed)},{"ARMOR",number(fighter.armor*100)+"%"}}};
+        for(int index=0;index<4;++index) {
+            float sx=x+17+(index%2)*156.0f,sy=y+78+(index/2)*39.0f;
+            text(stats[index].first,sx,sy,8,Muted); text(stats[index].second,sx+58,sy-3,13,White);
+        }
+        DrawLineEx({x+17,y+151},{x+width-17,y+151},1,Border);
+        text("LOADOUT",x+17,y+160,9,Muted);
+        if(fighter.items.empty()) {
+            fitted(fighter.actorKind=="fighter"?"No loadout":"Built-in "+fighter.actorKind+" behaviour",x+91,y+158,width-108,10,White);
+        } else {
+            for(size_t index=0;index<fighter.items.size();++index) {
+                const auto& item=fighter.items[index]; float rowY=y+181+static_cast<float>(index)*22;
+                std::string category=item.category=="modifier"?"STAT":item.category=="ability"?"ABILITY":"WEAPON";
+                text(category,x+17,rowY,8,Muted); fitted(item.name,x+91,rowY-2,width-108,10,index==0?ballPopoverColor:White);
+            }
+        }
     }
     void resetSeason() {
         wallet.resetSeason(catalog.rules.startingCoins); persist(); stake=1+(wallet.coins-1)/2;
@@ -168,7 +227,7 @@ struct App {
     void reroll() {
         bool completedMatch=sim && sim->finished;
         sim.reset(); preview=generateMatch(catalog,random()); accumulator=0; paused=false; returned=0;
-        countdown.reset(); resultAge=0; lastEvent=0; floating.clear(); impacts.clear(); messageCooldown={};
+        countdown.reset(); resultAge=0; lastEvent=0; floating.clear(); impacts.clear(); messageCooldown.assign(2,0);
         hitStop=tiltTimer=tiltTotal=tiltKick=screenTilt=0;
         for(int k=0;k<2;++k) appearances[k]=appearanceFor(preview.seed,k);
         stakeDragging=false;
@@ -199,7 +258,7 @@ struct App {
             bool directHit=event.amount>0 && (event.cue==Cue::Hit || event.cue==Cue::Sword || event.cue==Cue::Hammer);
             if(directHit) {
                 float strength=std::clamp(event.amount,1.0f,45.0f);
-                Vec direction=event.owner>=0&&event.owner<2?normalized(event.position-sim->match.fighters[event.owner].position):Vec{};
+                Vec direction=event.owner>=0&&event.owner<static_cast<int>(sim->match.fighters.size())?normalized(event.position-sim->match.fighters[event.owner].position):Vec{};
                 if(length(direction)<0.01f) { float phase=static_cast<float>(event.serial%360)*Pi/180; direction={std::cos(phase),std::sin(phase)}; }
                 impacts.push_back({event.position,direction,0,0.28f+0.004f*strength,strength,event.serial,false});
                 if(impacts.size()>42) impacts.erase(impacts.begin());
@@ -219,7 +278,7 @@ struct App {
                 tiltKick=tiltSide*0.7f;
             }
             // Text above a fighter is reserved for actual healing and damage numbers, never debug/event logs.
-            if(event.amount>0 && event.owner>=0 && messageCooldown[event.owner]<=0) {
+            if(event.amount>0 && event.owner>=0 && event.owner<static_cast<int>(messageCooldown.size()) && messageCooldown[event.owner]<=0) {
                 std::string label=(event.cue==Cue::Heal?"+":"-")+number(std::ceil(event.amount));
                 floating.push_back({label,event.position,event.owner,event.cue==Cue::Heal,event.critical});
                 if(floating.size()>12) floating.erase(floating.begin());
@@ -238,7 +297,28 @@ struct App {
         countdown.start(); floating.clear();
         if(audioBank) audioBank->play(Cue::Tick);
     }
+    void startChallenge(const ChallengeDefinition& challenge) {
+        if(challengeBattleOpen || !wallet.challengeUnlocked(challenge.id) || challengeSquadSeeds.size()!=static_cast<size_t>(challenge.requiredBalls)) return;
+        Match encounter=buildChallengeMatch(catalog,challenge,challengeSquadSeeds,random());
+        Rules challengeRules=catalog.rules; challengeRules.limit=challenge.timeLimit; challengeRules.suddenDps=0; challengeRules.sudden=challenge.timeLimit;
+        sim=std::make_unique<Simulation>(encounter,challengeRules); activeChallengeId=challenge.id;
+        challengeBattleOpen=true; challengeResultSaved=false; paused=false; accumulator=0; resultAge=0; lastEvent=0;
+        floating.clear(); impacts.clear(); messageCooldown.assign(sim->match.fighters.size(),0); countdown.start();
+        if(audioBank) audioBank->play(Cue::Tick);
+    }
+    void leaveChallenge() {
+        sim.reset(); challengeBattleOpen=false; challengeResultSaved=false; activeChallengeId.clear(); paused=false; countdown.reset();
+        accumulator=0; resultAge=0; lastEvent=0; floating.clear(); impacts.clear(); messageCooldown.assign(2,0);
+    }
     void settle() {
+        if(challengeBattleOpen && sim && sim->finished) {
+            if(!challengeResultSaved) {
+                challengeResultSaved=true; resultAge=0; floating.clear();
+                if(sim->winner==0) { wallet.completeChallenge(activeChallengeId); persist(); }
+                if(audioBank) audioBank->play(sim->winner==0?Cue::Win:Cue::Lose);
+            }
+            return;
+        }
         if(sim && sim->finished && wallet.active) {
             returned=wallet.settle(sim->winner,catalog.rules.payout); persist(); resultAge=0;
             floating.clear();
@@ -252,19 +332,24 @@ struct App {
             audioBank->update(dt);
             if(IsKeyPressed(KEY_M)) { audioBank->setMuted(!audioBank->muted); saveAudio(); }
         }
-        if(!paused && !catalogOpen && !rulesOpen && !collectionOpen && !inspectionOpen) {
+        bool simulationView=!collectionOpen && (!challengesOpen || challengeBattleOpen) && !inspectionOpen;
+        if(!paused && !catalogOpen && !rulesOpen && simulationView) {
             for(auto& label:floating) label.age+=dt;
             for(auto& cooldown:messageCooldown) cooldown=std::max(0.0f,cooldown-dt);
             std::erase_if(floating,[](const FloatingText& t){return t.age>=0.95f;});
             if(sim && sim->finished) resultAge+=dt;
         }
-        if(IsKeyPressed(KEY_F5) && !live()) {
-            try { Catalog fresh=Catalog::load(root/"data/catalog.json"); catalog=std::move(fresh); rebuildCollectionCache(); reroll(); error="Catalog reloaded. New settings are active."; }
+        if(IsKeyPressed(KEY_F5) && !live() && !challengeBattleOpen) {
+            try {
+                Catalog fresh=Catalog::load(root/"data/catalog.json"); ChallengeCatalog freshChallenges=ChallengeCatalog::load(root/"data/challenges.json",fresh);
+                catalog=std::move(fresh); challenges=std::move(freshChallenges); challengeMapViewReady=false; challengeEnemyPreviewIndex=-1; ensureChallengeRoots(); rebuildCollectionCache(); reroll(); error="Catalog and challenge scripts reloaded.";
+            }
             catch(const std::exception& e) { error=std::string("Catalog error: ")+e.what(); }
         }
         if(IsKeyPressed(KEY_ESCAPE) && inspectionOpen) { inspectionOpen=false; pendingRemove=-1; }
-        else if(IsKeyPressed(KEY_ESCAPE) && collectionOpen && !catalogOpen && !rulesOpen) collectionOpen=false;
-        if(!catalogOpen && !rulesOpen && !collectionOpen && !inspectionOpen) {
+        else if(IsKeyPressed(KEY_ESCAPE) && challengeBattleOpen && sim && sim->finished) leaveChallenge();
+        else if(IsKeyPressed(KEY_ESCAPE) && (collectionOpen || challengesOpen) && !catalogOpen && !rulesOpen) { collectionOpen=false; challengesOpen=false; }
+        if(!catalogOpen && !rulesOpen && simulationView) {
             if(IsKeyPressed(KEY_SPACE)) { if(live()) paused=!paused; else if(!sim) start(); }
             if(IsKeyPressed(KEY_R) && !live()) reroll();
             if(IsKeyPressed(KEY_ONE)) speed=1;
@@ -278,7 +363,7 @@ struct App {
             if(sim && sim->finished) settle();
             return;
         }
-        if(live() && !paused && !catalogOpen && !rulesOpen && !collectionOpen && !inspectionOpen) {
+        if(live() && !paused && !catalogOpen && !rulesOpen && simulationView) {
             if(countdown.active()) {
                 int previous=countdown.number(); countdown.advance(dt);
                 if(countdown.number()!=previous && audioBank) audioBank->play(countdown.number()==0?Cue::Fight:Cue::Tick);
@@ -334,9 +419,15 @@ struct App {
         if(button({x+20,688,272,32},label,selected==side,!sim,color,12)) selected=side;
     }
     void arena() {
+        const Match& shown=sim?sim->match:preview;
+        auto combatColor=[&](int fighterIndex) {
+            if(fighterIndex<0 || fighterIndex>=static_cast<int>(shown.fighters.size())) return Accent;
+            int team=shown.fighters[fighterIndex].team;
+            return shown.challenge?(team==0?PlayerGreen:Coral):Team[std::clamp(team,0,1)];
+        };
         box({360,171,720,487},Color{12,18,28,255},Border,0.03f);
-        std::string arenaEffect=preview.arena.effect=="spiked_arena"?"SPIKED":preview.arena.effect=="center_gravity"?"CENTER GRAVITY":preview.arena.effect=="healing_arena"?"HEALING CENTER":"";
-        text("ARENA / "+preview.arena.name+(arenaEffect.empty()?"":"  ·  "+arenaEffect),380,189,12,arenaEffect.empty()?Muted:Accent);
+        std::string arenaEffect=shown.arena.effect=="spiked_arena"?"SPIKED":shown.arena.effect=="center_gravity"?"CENTER GRAVITY":shown.arena.effect=="healing_arena"?"HEALING CENTER":"";
+        text("ARENA / "+shown.arena.name+(arenaEffect.empty()?"":"  ·  "+arenaEffect),380,189,12,arenaEffect.empty()?Muted:Accent);
         std::string status=!sim?"STANDBY":sim->finished?"FINISHED":paused?"PAUSED":countdown.active()?"GET READY":"LIVE";
         DrawCircle(956,196,3,!sim?Muted:sim->finished?Accent:Coral); text(status,968,188,11,!sim?Muted:sim->finished?Accent:Coral);
         BeginScissorMode(365,212,710,441);
@@ -350,7 +441,7 @@ struct App {
             DrawCircleV(center,radius*0.25f,White);
         };
         for(int x=390;x<1060;x+=24) for(int y=226;y<653;y+=24) DrawCircle(x,y,0.8f,Color{28,39,54,255});
-        const auto& vertices=preview.arena.vertices;
+        const auto& vertices=shown.arena.vertices;
         Color wall=sim && catalog.rules.suddenDps>0 && sim->time>=catalog.rules.sudden?Coral:Color{84,106,133,255};
         for(size_t n=0;n<vertices.size();++n) {
             Vector2 a=point(vertices[n]),b=point(vertices[(n+1)%vertices.size()]);
@@ -360,7 +451,7 @@ struct App {
             Vector2 a=point(vertices[n]),b=point(vertices[(n+1)%vertices.size()]);
             DrawLineEx(a,b,9,Fade(wall,0.07f)); DrawLineEx(a,b,2,wall);
         }
-        if(preview.arena.effect=="spiked_arena") {
+        if(shown.arena.effect=="spiked_arena") {
             for(size_t n=0;n<vertices.size();++n) {
                 Vec a=vertices[n],b=vertices[(n+1)%vertices.size()],edge=b-a;
                 float span=length(edge); Vec side=normalized(edge),inward=normalized(Vec{-edge.y,edge.x});
@@ -372,7 +463,7 @@ struct App {
                     DrawLineEx(point(left),point(tip),1.1f,Fade(White,0.72f));
                 }
             }
-        } else if(preview.arena.effect=="center_gravity") {
+        } else if(shown.arena.effect=="center_gravity") {
             DrawCircleV(point({0,0}),35,Fade(Cyan,0.06f)); DrawCircleLinesV(point({0,0}),35,Fade(Cyan,0.52f));
             for(int n=0;n<6;++n) {
                 float angle=n*Pi/3;
@@ -380,7 +471,7 @@ struct App {
                 DrawLineEx(point(outer),point(inner),1.8f,Fade(Cyan,0.62f));
             }
             text("PULL",704,422,9,Fade(Cyan,0.8f));
-        } else if(preview.arena.effect=="healing_arena") {
+        } else if(shown.arena.effect=="healing_arena") {
             float radius=catalog.rules.radius*1.4f;
             DrawCircleV(point({0,0}),radius,Fade(Accent,0.16f)); DrawCircleLinesV(point({0,0}),radius,Fade(Accent,0.85f));
             centered("+15",720,418,11,Accent);
@@ -389,7 +480,7 @@ struct App {
         DrawLineEx(point({0,-16}),point({0,16}),1,Color{40,55,73,255});
         if(sim) {
             for(const auto& h:sim->hazards) {
-                Vector2 p=point(h.position); Color c=Team[h.owner];
+                Vector2 p=point(h.position); Color c=combatColor(h.owner);
                 if(h.mine) {
                     DrawCircleLinesV(p,h.radius,Fade(c,h.arm>0?0.1f:0.28f));
                     DrawCircleV(p,9,Panel); icon("mine",p,Fade(c,h.arm>0?0.4f:1),0.7f);
@@ -410,15 +501,15 @@ struct App {
                 }
             }
             for(const auto& shape:sim->fieldShapes) {
-                float alpha=std::clamp(shape.life/shape.total,0.0f,1.0f); Color c=Team[shape.owner];
+                float alpha=std::clamp(shape.life/shape.total,0.0f,1.0f); Color c=combatColor(shape.owner);
                 if(shape.vertices.size()>=3) {
                     for(size_t n=1;n+1<shape.vertices.size();++n) DrawTriangle(point(shape.vertices[0]),point(shape.vertices[n]),point(shape.vertices[n+1]),Fade(c,0.20f*alpha));
                     for(size_t n=0;n<shape.vertices.size();++n) DrawLineEx(point(shape.vertices[n]),point(shape.vertices[(n+1)%shape.vertices.size()]),2.4f,Fade(c,alpha));
                 }
             }
-            for(int owner=0;owner<2;++owner) {
+            for(size_t owner=0;owner<sim->damageFields.size();++owner) {
                 const auto& field=sim->damageFields[owner]; if(field.points.empty()) continue;
-                Color c=Team[owner];
+                Color c=combatColor(static_cast<int>(owner));
                 auto fieldLine=[&](Vec a,Vec b) { DrawLineEx(point(a),point(b),5,Fade(c,0.12f)); DrawLineEx(point(a),point(b),2.1f,Fade(c,0.72f)); };
                 for(size_t point=1;point<field.points.size();++point) fieldLine(field.points[point-1],field.points[point]);
                 if(field.drawing) fieldLine(field.points.back(),sim->match.fighters[owner].position);
@@ -437,7 +528,7 @@ struct App {
                 if(tape.deploying) { DrawCircleV(end,6,Fade(tapeColor,0.25f)); DrawCircleLinesV(end,4,tapeColor); }
             }
             for(const auto& minion:sim->minions) {
-                Color c=Team[minion.owner]; Vector2 p=point(minion.position);
+                Color c=combatColor(minion.owner); Vector2 p=point(minion.position);
                 if(minion.weapon.effect=="sword") {
                     Vec dir{std::cos(minion.meleeAngle),std::sin(minion.meleeAngle)};
                     Vec start=minion.position+dir*(minion.radius+3),tip=minion.position+dir*(minion.radius+minion.weapon.get("reach"));
@@ -450,7 +541,9 @@ struct App {
                 }
                 DrawCircleV(p,minion.radius+4,Fade(c,0.18f)); DrawCircleV(p,minion.radius,c); DrawCircleLinesV(p,minion.radius,White);
                 Appearance look=appearanceFor(sim->match.seed^0x51A7u,minion.owner); look.hat=0; look.beard=0;
-                Vec gaze=normalized(sim->match.fighters[1-minion.owner].position-minion.position);
+                int gazeTarget=-1; float gazeDistance=1e9f;
+                for(size_t candidate=0;candidate<shown.fighters.size();++candidate) if(shown.fighters[candidate].team!=shown.fighters[minion.owner].team && shown.fighters[candidate].hp>0) { float distance=length(shown.fighters[candidate].position-minion.position); if(distance<gazeDistance) { gazeDistance=distance; gazeTarget=static_cast<int>(candidate); } }
+                Vec gaze=gazeTarget>=0?normalized(shown.fighters[gazeTarget].position-minion.position):normalized(minion.velocity);
                 drawFace(p,minion.radius,look,sim->time,{gaze.x,gaze.y},0,false);
                 drawMinionWeapon(minion.weapon,minion.position,minion.velocity,minion.radius,c);
                 float hp=std::clamp(minion.hp/minion.maxHp,0.0f,1.0f);
@@ -459,8 +552,9 @@ struct App {
             }
             for(const auto& mouse:sim->mice) {
                 Vec forward=normalized(mouse.velocity),side{-forward.y,forward.x}; Vector2 p=point(mouse.position);
-                Color fur=mouse.owner==0?Color{179,193,207,255}:Color{207,178,176,255};
-                Color innerEar=mouse.owner==0?Color{244,171,190,255}:Color{246,158,177,255};
+                bool playerMouse=shown.fighters[mouse.owner].team==0;
+                Color fur=shown.challenge?(playerMouse?Color{137,207,157,255}:Color{207,178,176,255}):(mouse.owner==0?Color{179,193,207,255}:Color{207,178,176,255});
+                Color innerEar=shown.challenge?(playerMouse?Color{185,238,198,255}:Color{246,158,177,255}):(mouse.owner==0?Color{244,171,190,255}:Color{246,158,177,255});
                 // A tiny round body, ears, whiskers, nose and tail make every summoned mouse readable in the arena.
                 DrawLineEx(point(mouse.position-forward*(mouse.radius+3)),point(mouse.position-forward*(mouse.radius+12)+side*4),1.4f,Fade(fur,0.8f));
                 DrawCircleV(point(mouse.position-forward*2+side*(mouse.radius*0.55f)),mouse.radius*0.5f,fur);
@@ -473,9 +567,10 @@ struct App {
                 DrawCircleV(point(mouse.position+forward*2-side*(mouse.radius*0.38f)),1.15f,Color{24,30,39,255});
                 Vec nose=mouse.position+forward*(mouse.radius*0.66f);
                 for(float offset:{-1.0f,1.0f}) DrawLineEx(point(nose+side*(offset*2)),point(nose+forward*2+side*(offset*(mouse.radius+3))),0.8f,Fade(White,0.88f));
+                if(mouse.targetable) DrawCircleLinesV(p,mouse.radius+3,Fade(Coral,0.8f));
             }
             for(const auto& p:sim->projectiles) {
-                Vec dir=normalized(p.velocity); Color c=Team[p.owner];
+                Vec dir=normalized(p.velocity); Color c=combatColor(p.owner);
                 if(p.kind!="shuriken" && p.kind!="bouncy_ball") DrawLineEx(point(p.position-dir*20),point(p.position),p.radius*1.3f,Fade(c,0.45f));
                 if(p.kind=="bow" || p.kind=="poison_dart") { DrawLineEx(point(p.position-dir*12),point(p.position+dir*5),2,p.kind=="poison_dart"?Color{118,226,106,255}:White); Vec side{-dir.y,dir.x}; DrawTriangle(point(p.position+dir*7),point(p.position-dir*1+side*4),point(p.position-dir*1-side*4),c); }
                 else if(p.kind=="shuriken") {
@@ -522,8 +617,9 @@ struct App {
             drawMinionWeapon(owner.minionWeapon,position,forward*helper->get("speed"),radius,Team[k]);
             centered("RANDOM WEAPON",p.x,p.y+radius+12,9,Muted);
         }
-        for(int k=0;k<2;++k) {
-            const auto& f=sim?sim->match.fighters[k]:preview.fighters[k]; Vector2 p=point(f.position); Color c=Team[k];
+        for(size_t k=0;k<shown.fighters.size();++k) {
+            const auto& f=shown.fighters[k]; if(f.hidden) continue; Vector2 p=point(f.position); Color c=combatColor(static_cast<int>(k));
+            Appearance fighterLook=shown.challenge?appearanceFor(f.appearanceSeed,0):appearanceFor(shown.seed,static_cast<int>(k));
             if(f.hp<=0) { DrawCircleLinesV(p,f.radius+12,Fade(c,0.3f)); continue; }
             if(sim) {
                 Vec dir=normalized(f.velocity);
@@ -557,8 +653,10 @@ struct App {
                     DrawLineEx(point(head+perp*11),point(head-perp*11),3,White);
                 }
             }}
-            const auto& other=sim?sim->match.fighters[1-k]:preview.fighters[1-k];
-            Vec aim=normalized(other.position-f.position),side{-aim.y,aim.x}; int mount=0;
+            Vec aimPosition{}; bool hasAimTarget=false; float aimDistance=1e9f;
+            for(size_t candidate=0;candidate<shown.fighters.size();++candidate) if(shown.fighters[candidate].team!=f.team && shown.fighters[candidate].hp>0 && !shown.fighters[candidate].untargetable) { float distance=length(shown.fighters[candidate].position-f.position); if(distance<aimDistance) { aimDistance=distance; aimPosition=shown.fighters[candidate].position; hasAimTarget=true; } }
+            if(sim) for(const auto& targetMouse:sim->mice) if(targetMouse.targetable && targetMouse.hp>0 && shown.fighters[targetMouse.owner].team!=f.team) { float distance=length(targetMouse.position-f.position); if(distance<aimDistance) { aimDistance=distance; aimPosition=targetMouse.position; hasAimTarget=true; } }
+            Vec aim=hasAimTarget?normalized(aimPosition-f.position):normalized(f.velocity),side{-aim.y,aim.x}; int mount=0;
             for(const auto& i:f.items) if(i.effect=="bow" || i.effect=="pistol" || i.effect=="shotgun" || i.effect=="poison_dart" || i.effect=="shuriken") {
                 Vec p0=f.position+aim*(f.radius+9)+side*(mount++*15.0f);
                 if(i.effect=="bow" || i.effect=="poison_dart") {
@@ -585,12 +683,14 @@ struct App {
             }
             DrawCircleV(p,f.radius+7,Fade(c,0.09f));
             DrawCircleV({p.x+2,p.y+5},f.radius,Color{4,8,14,200});
-            DrawCircleV(p,f.radius,f.flash>0?White:Fade(c,f.invulnerable>0?0.4f:1));
-            drawFace(p,f.radius,appearances[k],realClock,{aim.x,aim.y},f.flash,sim && sim->finished && sim->winner==k);
-            drawHat(p,f.radius,appearances[k],realClock);
+            Color body=f.actorKind=="wild_dog"?Color{145,91,48,255}:f.actorKind=="dummy"?Color{137,120,96,255}:f.actorKind=="boss"?Color{255,174,62,255}:c;
+            DrawCircleV(p,f.radius,f.flash>0?White:Fade(body,f.invulnerable>0?0.4f:1));
+            if(f.actorKind=="boss") { DrawCircleLinesV(p,f.radius+5,Accent); DrawCircleLinesV(p,f.radius+9,Fade(Coral,0.7f)); }
+            drawFace(p,f.radius,fighterLook,realClock,{aim.x,aim.y},f.flash,sim && sim->finished && sim->winner!=f.team);
+            if(f.actorKind=="fighter") drawHat(p,f.radius,fighterLook,realClock);
             if(sim && f.stunTime>0) {
                 float bob=std::sin(sim->time*10)*2;
-                float top=p.y-f.radius*(appearances[k].hat?2.55f:1.65f);
+                float top=p.y-f.radius*(fighterLook.hat?2.55f:1.65f);
                 for(int star=0;star<3;++star) {
                     float phase=sim->time*5+star*2*Pi/3;
                     Vector2 at{p.x+std::cos(phase)*19,top+std::sin(phase)*6+bob};
@@ -602,7 +702,7 @@ struct App {
             if(f.slowTime>0) { DrawCircleLinesV(p,f.radius+13,Color{255,202,82,255}); DrawCircleV({p.x-f.radius*0.75f,p.y-f.radius*0.8f},3,Color{255,202,82,255}); }
             if(f.poisonDps>0) { DrawCircleLinesV(p,f.radius+18,Color{118,226,106,255}); DrawCircleV({p.x+f.radius*0.55f,p.y-f.radius*0.8f},3,Color{118,226,106,255}); }
             if(sim) {
-                float healthY=p.y-f.radius*(appearances[k].hat?2.2f:1.0f)-11;
+                float healthY=p.y-f.radius*(fighterLook.hat?2.2f:1.0f)-11;
                 DrawRectangleRec({p.x-22,healthY,44,4},Border);
                 DrawRectangleRec({p.x-22,healthY,44*std::clamp(f.hp/f.maxHp,0.0f,1.0f),4},c);
                 if(f.comboWindow>0) {
@@ -644,7 +744,7 @@ struct App {
         }
         if(sim) for(const auto& b:sim->bursts) {
             float progress=1-b.life/b.total; Vector2 p=point(b.position);
-            if(b.text.empty()) { DrawCircleLinesV(p,b.radius*(0.3f+0.7f*progress),Fade(Team[b.owner],1-progress)); DrawCircleV(p,b.radius*(0.3f+0.7f*progress),Fade(Team[b.owner],0.07f*(1-progress))); }
+            if(b.text.empty()) { Color c=combatColor(b.owner); DrawCircleLinesV(p,b.radius*(0.3f+0.7f*progress),Fade(c,1-progress)); DrawCircleV(p,b.radius*(0.3f+0.7f*progress),Fade(c,0.07f*(1-progress))); }
         }
         for(const auto& label:floating) {
             float progress=label.age/0.95f,alpha=std::min(1.0f,(1-progress)*3);
@@ -660,16 +760,19 @@ struct App {
         }
         if(sim && sim->finished) {
             float enter=1-std::pow(1-std::min(1.0f,resultAge/0.45f),3),offset=(1-enter)*35;
-            Color c=sim->winner<0?Accent:Team[sim->winner];
+            Color c=sim->winner<0?Accent:sim->match.challenge?(sim->winner==0?PlayerGreen:Coral):Team[sim->winner];
             for(int n=0;n<40 && resultAge<2.4f;++n) {
                 float angle=n*2.39996f,velocity=75+(n%7)*19.0f;
                 float x=720+std::cos(angle)*velocity*resultAge,y=422+std::sin(angle)*velocity*resultAge+55*resultAge*resultAge;
                 DrawRectanglePro({x,y,5,9},{2,4},n*17+resultAge*140,Fade(n%3?c:Accent,std::max(0.0f,1-resultAge/2.4f)));
             }
             box({459,347+offset,522,159},Fade(Background,0.95f*enter),Fade(c,enter),0.08f);
-            centered(sim->winner<0?"DRAW":sim->match.fighters[sim->winner].name+" WINS!",720,367+offset,34+8*(1-enter),Fade(c,enter));
-            centered(sim->winner<0?"Your stake has been refunded.":sim->winner==selected?"Good call. +"+std::to_string(returned-wallet.stake)+" coins":"The arena takes this one. -"+std::to_string(wallet.stake)+" coins",720,425+offset,17,Fade(White,enter));
-            centered("Damage dealt: "+number(sim->match.fighters[0].damageDealt)+"  /  "+number(sim->match.fighters[1].damageDealt),720,468+offset,12,Fade(Muted,enter));
+            std::string outcome=sim->match.challenge?(sim->winner==0?"CHALLENGE COMPLETE":"CHALLENGE FAILED"):sim->winner<0?"DRAW":sim->match.fighters[sim->winner].name+" WINS!";
+            centered(outcome,720,367+offset,34+8*(1-enter),Fade(c,enter));
+            std::string resultDetail=sim->match.challenge?(sim->winner==0?"The next branches are now available.":"Adjust your squad and try again."):sim->winner<0?"Your stake has been refunded.":sim->winner==selected?"Good call. +"+std::to_string(returned-wallet.stake)+" coins":"The arena takes this one. -"+std::to_string(wallet.stake)+" coins";
+            centered(resultDetail,720,425+offset,17,Fade(White,enter));
+            float playerDamage=0,enemyDamage=0; for(const auto& fighter:sim->match.fighters) (fighter.team==0?playerDamage:enemyDamage)+=fighter.damageDealt;
+            centered("Damage dealt: "+number(playerDamage)+"  /  "+number(enemyDamage),720,468+offset,12,Fade(Muted,enter));
         } else if(paused) centered("PAUSED",720,406,32,Accent);
         else if(countdown.active()) {
             float progress=countdown.phase(); bool fight=countdown.number()==0;
@@ -678,7 +781,7 @@ struct App {
             DrawRing({720,416},76+progress*24,78+progress*24,-90,270,80,Fade(fight?Accent:Cyan,(1-progress)*0.7f));
             std::string label=fight?"FIGHT!":std::to_string(countdown.number());
             float size=(fight?76.0f:104.0f)*(1+0.2f*std::exp(-progress*12));
-            centered(fight?"LET THE ODDS PLAY OUT":"BET LOCKED · GET READY",720,308,12,Muted);
+            centered(fight?"LET THE ODDS PLAY OUT":sim->match.challenge?"CHALLENGE · GET READY":"BET LOCKED · GET READY",720,308,12,Muted);
             centered(label,723,367,size,Fade(Background,0.8f));
             centered(label,720,364,size,c);
             for(int n=0;n<4;++n) DrawCircle(690+n*20,504,3,n<=3-countdown.number()?Accent:Border);
@@ -752,7 +855,7 @@ struct App {
             box(card,unlocked?Panel:Color{14,19,28,255},unlocked?Border:Color{29,38,51,255},0.05f);
             text("SLOT "+std::to_string(slot+1),x+12,y+10,9,unlocked?Accent:Muted);
             if(slot<static_cast<int>(ownedBallCache.size())) {
-                const auto& fighter=ownedBallCache[slot]; uint32_t seed=wallet.ownedBallSeeds[slot]; Color color=Team[seed&1u];
+                const auto& fighter=ownedBallCache[slot]; uint32_t seed=wallet.ownedBallSeeds[slot]; Color color=PlayerGreen;
                 drawPortrait({x+46,y+75},28,color,appearanceFor(seed,0),realClock);
                 fitted(fighter.name+" "+fighter.title,x+84,y+40,118,14);
                 text(std::to_string(fighter.points)+" PTS",x+84,y+68,11,color);
@@ -763,6 +866,7 @@ struct App {
                     if(pendingRemove==slot) { wallet.removeOwnedBall(slot); persist(); rebuildCollectionCache(); pendingRemove=-1; return; }
                     pendingRemove=slot;
                 }
+                offerBallPopover(fighter,card,color);
             } else if(unlocked) {
                 centered("EMPTY SLOT",x+107,y+69,16,Muted);
                 centered("Buy a ball from the market",x+107,y+99,10,Color{86,105,127,255});
@@ -787,7 +891,7 @@ struct App {
                 centered("SOLD",x+160,y+82,24,Muted); centered("Refresh the market for a new offer",x+160,y+122,10,Color{86,105,127,255});
                 continue;
             }
-            const auto& fighter=marketBallCache[market]; Color color=Team[seed&1u]; int price=marketPrice(fighter);
+            const auto& fighter=marketBallCache[market]; Color color=PlayerGreen; int price=marketPrice(fighter);
             drawPortrait({x+58,y+94},32,color,appearanceFor(seed,0),realClock);
             fitted(fighter.name+" "+fighter.title,x+109,y+47,196,16);
             text(std::to_string(fighter.points)+" PTS",x+109,y+78,11,color);
@@ -800,6 +904,7 @@ struct App {
             if(button({x+128,y+175,179,31},room?"BUY":"NO FREE SLOT",true,room&&wallet.coins>=price,Accent,11)) {
                 if(wallet.buyMarketBall(market,price)) { persist(); rebuildCollectionCache(); pendingRemove=-1; return; }
             }
+            offerBallPopover(fighter,card,color);
         }
         box({1039,635,373,222},PanelAlt,Border,0.05f);
         text("REFRESH MARKET",1062,657,18,Accent);
@@ -808,16 +913,273 @@ struct App {
         if(button({1070,802,310,36},"REFRESH ALL  /  1000",true,wallet.coins>=1000,Accent,12)) {
             if(wallet.refreshMarket(freshMarketSeeds())) { persist(); rebuildCollectionCache(); inspectionOpen=false; pendingRemove=-1; }
         }
-        text("Owned balls are permanent until you confirm removal. Arena deployment will be added in the next stage.",28,895,11,Muted);
+        text("Owned balls are permanent until you confirm removal. Player-owned balls always use the green team colour.",28,895,11,Muted);
+    }
+    Color challengeColor(const std::string& name) const {
+        if(name=="red") return Coral;
+        if(name=="green") return PlayerGreen;
+        if(name=="blue") return Color{75,163,255,255};
+        if(name=="purple") return Color{190,101,220,255};
+        if(name=="yellow") return Color{255,219,76,255};
+        if(name=="orange") return Color{255,164,76,255};
+        return Cyan;
+    }
+    bool challengeRequirementsMet(const ChallengeDefinition& challenge) const {
+        return std::ranges::all_of(challenge.prerequisites,[&](const std::string& id){return wallet.challengeCompleted(id);});
+    }
+    void rebuildChallengeEnemyPreview() {
+        challengeEnemyPreview.clear(); challengeEnemyPreviewIndex=selectedChallenge;
+        if(selectedChallenge<0 || selectedChallenge>=static_cast<int>(challenges.challenges.size())) return;
+        const auto& challenge=challenges.challenges[selectedChallenge];
+        std::vector<uint32_t> placeholderSeeds;
+        for(int index=0;index<challenge.requiredBalls;++index) placeholderSeeds.push_back(0x71000000u+static_cast<uint32_t>(selectedChallenge*17+index));
+        Match previewMatch=buildChallengeMatch(catalog,challenge,placeholderSeeds,0x62000000u+static_cast<uint32_t>(selectedChallenge));
+        for(auto& fighter:previewMatch.fighters) if(fighter.team==1) challengeEnemyPreview.push_back(std::move(fighter));
+    }
+    void fitChallengeMap(Rectangle area) {
+        if(challenges.challenges.empty()) return;
+        float minX=challenges.challenges.front().mapX,maxX=minX,minY=challenges.challenges.front().mapY,maxY=minY;
+        for(const auto& challenge:challenges.challenges) {
+            minX=std::min(minX,challenge.mapX); maxX=std::max(maxX,challenge.mapX);
+            minY=std::min(minY,challenge.mapY); maxY=std::max(maxY,challenge.mapY);
+        }
+        challengeMapCamera={(minX+maxX)*0.5f,(minY+maxY)*0.5f};
+        float availableWidth=std::max(1.0f,area.width-190),availableHeight=std::max(1.0f,area.height-180);
+        challengeMapZoom=std::clamp(std::min(availableWidth/std::max(1.0f,maxX-minX),availableHeight/std::max(1.0f,maxY-minY)),0.25f,1.35f);
+        challengeMapViewReady=true;
+    }
+    void challengeBattleScreen() {
+        const ChallengeDefinition* challenge=challenges.find(activeChallengeId);
+        if(!challenge || !sim) { leaveChallenge(); return; }
+        text(challenge->name,28,98,30,challengeColor(challenge->color));
+        std::string objective=challenge->objectiveType=="deal_damage"?"DEAL "+number(challenge->objectiveTarget)+" DAMAGE":challenge->objectiveType=="survive"?"SURVIVE FOR "+number(challenge->timeLimit)+" SECONDS":"DEFEAT EVERY ENEMY";
+        text(objective+"  /  "+number(std::max(0.0f,sim->rules.limit-sim->time),1)+" s remaining",29,135,12,Muted);
+        auto roster=[&](int team,float x,const std::string& title,Color color) {
+            box({x,171,312,565},Panel,Border,0.04f); DrawRectangleRounded({x+1,172,310,4},0.5f,6,color);
+            text(title,x+20,191,12,color); int row=0;
+            for(size_t index=0;index<sim->match.fighters.size();++index) {
+                const auto& fighter=sim->match.fighters[index]; if(fighter.team!=team || fighter.hidden) continue;
+                float y=225+row*118.0f; Color body=fighter.actorKind=="wild_dog"?Color{145,91,48,255}:fighter.actorKind=="dummy"?Color{137,120,96,255}:fighter.actorKind=="boss"?Color{255,174,62,255}:color;
+                Rectangle rosterCard{x+14,y,284,102}; box(rosterCard,PanelAlt,Border,0.04f);
+                drawPortrait({x+49,y+43},23,body,appearanceFor(fighter.appearanceSeed,0),realClock,sim->finished&&sim->winner!=team);
+                fitted(fighter.name+" "+fighter.title,x+83,y+12,199,15,White);
+                text(fighter.actorKind=="wild_dog"?"BEAST":fighter.actorKind=="dummy"?"TARGET":fighter.actorKind=="boss"?"BOSS":std::to_string(fighter.points)+" PTS",x+83,y+37,10,body);
+                float health=std::clamp(fighter.hp/fighter.maxHp,0.0f,1.0f);
+                DrawRectangleRec({x+83,y+60,190,5},Border); DrawRectangleRec({x+83,y+60,190*health,5},body);
+                text(number(fighter.hp)+" / "+number(fighter.maxHp)+" HP",x+83,y+73,9,Muted); offerBallPopover(fighter,rosterCard,body); ++row;
+            }
+            if(team==1 && sim->match.mouseInvasion.enabled) {
+                int active=static_cast<int>(std::ranges::count_if(sim->mice,[](const SummonedMouse& mouse){return mouse.targetable && mouse.hp>0;}));
+                float y=225+row*118.0f; box({x+14,y,284,102},PanelAlt,Border,0.04f);
+                DrawCircleV({x+49,y+43},19,Color{207,178,176,255}); DrawCircleLines(static_cast<int>(x+49),static_cast<int>(y+43),22,Coral);
+                centered("M",x+49,y+32,13,Background); text("MOUSE INVASION",x+83,y+12,15,White);
+                text(std::to_string(active)+" / "+std::to_string(sim->match.mouseInvasion.maxCount)+" ACTIVE",x+83,y+37,10,Coral);
+                text("A new mouse every "+number(sim->match.mouseInvasion.interval,1)+" s",x+83,y+62,10,Muted);
+            }
+        };
+        roster(0,28,"YOUR SQUAD",PlayerGreen); roster(1,1100,"ENEMY TEAM",Coral);
+        arena(); controls();
+        box({28,758,1384,125},Panel,Border,0.08f);
+        float playerDamage=0; for(const auto& fighter:sim->match.fighters) if(fighter.team==0) playerDamage+=fighter.damageDealt;
+        text("CHALLENGE OBJECTIVE",51,779,10,challengeColor(challenge->color)); text(objective,51,804,23,White);
+        if(challenge->objectiveType=="deal_damage") {
+            float progress=std::clamp(playerDamage/challenge->objectiveTarget,0.0f,1.0f);
+            DrawRectangleRounded({51,844,650,8},1,8,Border); DrawRectangleRounded({51,844,650*progress,8},1,8,PlayerGreen);
+            text(number(playerDamage)+" / "+number(challenge->objectiveTarget),716,837,13,PlayerGreen);
+        } else text(challenge->objectiveType=="survive"?"Stay alive until the timer reaches zero.":"Win before the timer reaches zero.",51,842,12,Muted);
+        if(sim->finished) {
+            if(button({1102,783,286,48},"RETURN TO MAP  →",true,true,Accent,14)) { leaveChallenge(); return; }
+            centered(sim->winner==0?"Completed and saved":"No entry fee · try again anytime",1245,845,10,sim->winner==0?PlayerGreen:Muted);
+        } else {
+            if(button({1102,783,286,48},"ABANDON CHALLENGE",false,true,Coral,12)) leaveChallenge();
+            centered("SPACE pause  ·  1–5 speed",1245,845,10,Muted);
+        }
+    }
+    void challengesScreen() {
+        if(challengeBattleOpen) { challengeBattleScreen(); return; }
+        challengeSquadSeeds.erase(std::remove_if(challengeSquadSeeds.begin(),challengeSquadSeeds.end(),[&](uint32_t seed){return std::find(wallet.ownedBallSeeds.begin(),wallet.ownedBallSeeds.end(),seed)==wallet.ownedBallSeeds.end();}),challengeSquadSeeds.end());
+        selectedChallenge=std::clamp(selectedChallenge,0,static_cast<int>(challenges.challenges.size())-1);
+        if(challengeEnemyPreviewIndex!=selectedChallenge) rebuildChallengeEnemyPreview();
+        const ChallengeDefinition& selectedDefinition=challenges.challenges[selectedChallenge];
+        text("CHALLENGES",28,98,30);
+        text("Build a squad from your collection and progress through the branching arena map.",29,135,12,Muted);
+        Rectangle mapArea{28,165,944,692}; box(mapArea,Color{11,17,26,255},Border,0.025f);
+        if(!challengeMapViewReady) fitChallengeMap(mapArea);
+        Vector2 mapCenter{mapArea.x+mapArea.width*0.5f,mapArea.y+mapArea.height*0.5f};
+        auto nodePosition=[&](const ChallengeDefinition& challenge) { return Vector2{mapCenter.x+(challenge.mapX-challengeMapCamera.x)*challengeMapZoom,mapCenter.y+(challenge.mapY-challengeMapCamera.y)*challengeMapZoom}; };
+        auto zoomAt=[&](float factor,Vector2 anchor) {
+            Vec worldAt{challengeMapCamera.x+(anchor.x-mapCenter.x)/challengeMapZoom,challengeMapCamera.y+(anchor.y-mapCenter.y)/challengeMapZoom};
+            challengeMapZoom=std::clamp(challengeMapZoom*factor,0.25f,2.0f);
+            challengeMapCamera={worldAt.x-(anchor.x-mapCenter.x)/challengeMapZoom,worldAt.y-(anchor.y-mapCenter.y)/challengeMapZoom};
+        };
+        Rectangle zoomControls{mapArea.x+mapArea.width-186,mapArea.y+12,170,34};
+        bool overMap=!inputBlocked && inside(mapArea),overControls=inside(zoomControls);
+        if(overMap && !overControls) {
+            float wheel=GetMouseWheelMove(); if(std::abs(wheel)>0.01f) zoomAt(std::pow(1.16f,wheel),mouse);
+            if(challengeMapDragButton<0) {
+                if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) challengeMapDragButton=MOUSE_BUTTON_LEFT;
+                else if(IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) challengeMapDragButton=MOUSE_BUTTON_MIDDLE;
+                else if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) challengeMapDragButton=MOUSE_BUTTON_RIGHT;
+                if(challengeMapDragButton>=0) {
+                    challengeMapDragPrevious=challengeMapPressPosition=mouse; challengeMapDragMoved=challengeMapDragButton!=MOUSE_BUTTON_LEFT; challengeMapPressedNode=-1;
+                    float hitRadius=34*std::clamp(challengeMapZoom,0.58f,1.25f);
+                    for(size_t index=0;index<challenges.challenges.size();++index) if(CheckCollisionPointCircle(mouse,nodePosition(challenges.challenges[index]),hitRadius)) { challengeMapPressedNode=static_cast<int>(index); break; }
+                }
+            }
+        }
+        if(challengeMapDragButton>=0 && IsMouseButtonDown(challengeMapDragButton)) {
+            if(!challengeMapDragMoved && length(Vec{mouse.x-challengeMapPressPosition.x,mouse.y-challengeMapPressPosition.y})>=4) challengeMapDragMoved=true;
+            if(challengeMapDragMoved) {
+                challengeMapCamera.x-=(mouse.x-challengeMapDragPrevious.x)/challengeMapZoom;
+                challengeMapCamera.y-=(mouse.y-challengeMapDragPrevious.y)/challengeMapZoom;
+                SetMouseCursor(MOUSE_CURSOR_RESIZE_ALL);
+            }
+            challengeMapDragPrevious=mouse;
+        } else if(challengeMapDragButton>=0) {
+            if(challengeMapDragButton==MOUSE_BUTTON_LEFT && !challengeMapDragMoved && challengeMapPressedNode>=0) {
+                selectedChallenge=challengeMapPressedNode; challengeSquadSeeds.clear(); challengeEnemyPreviewIndex=-1; if(audioBank) audioBank->play(Cue::Click);
+            }
+            challengeMapDragButton=-1; challengeMapPressedNode=-1; challengeMapDragMoved=false;
+        }
+        BeginScissorMode(static_cast<int>(mapArea.x+1),static_cast<int>(mapArea.y+1),static_cast<int>(mapArea.width-2),static_cast<int>(mapArea.height-2));
+        float worldLeft=challengeMapCamera.x-mapArea.width/(2*challengeMapZoom),worldRight=challengeMapCamera.x+mapArea.width/(2*challengeMapZoom);
+        float worldTop=challengeMapCamera.y-mapArea.height/(2*challengeMapZoom),worldBottom=challengeMapCamera.y+mapArea.height/(2*challengeMapZoom);
+        const float grid=80;
+        for(float x=std::floor(worldLeft/grid)*grid;x<=worldRight;x+=grid) for(float y=std::floor(worldTop/grid)*grid;y<=worldBottom;y+=grid) {
+            Vector2 p{mapCenter.x+(x-challengeMapCamera.x)*challengeMapZoom,mapCenter.y+(y-challengeMapCamera.y)*challengeMapZoom}; DrawCircleV(p,std::clamp(challengeMapZoom,0.55f,1.2f),Color{27,38,52,255});
+        }
+        float nodeScale=std::clamp(challengeMapZoom,0.58f,1.25f),nodeRadius=34*nodeScale;
+        for(const auto& challenge:challenges.challenges) for(const auto& prerequisiteId:challenge.prerequisites) {
+            const auto* prerequisite=challenges.find(prerequisiteId); if(!prerequisite) continue;
+            Vector2 a=nodePosition(*prerequisite),b=nodePosition(challenge); bool progressed=wallet.challengeCompleted(prerequisiteId);
+            DrawLineEx(a,b,18*nodeScale,Color{31,41,54,255}); DrawLineEx(a,b,5*nodeScale,progressed?Fade(challengeColor(challenge.color),0.72f):Color{54,66,82,255});
+        }
+        for(size_t index=0;index<challenges.challenges.size();++index) {
+            const auto& challenge=challenges.challenges[index]; Vector2 p=nodePosition(challenge); Color color=challengeColor(challenge.color);
+            bool unlocked=wallet.challengeUnlocked(challenge.id),completed=wallet.challengeCompleted(challenge.id),available=challengeRequirementsMet(challenge);
+            bool visible=CheckCollisionPointRec(p,mapArea),hover=visible&&!inputBlocked&&!overControls&&!challengeMapDragMoved&&CheckCollisionPointCircle(mouse,p,nodeRadius);
+            if(hover) SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+            DrawCircleV({p.x+3*nodeScale,p.y+5*nodeScale},nodeRadius+1,Color{4,8,13,220});
+            DrawRing(p,nodeRadius-9*nodeScale,nodeRadius+1,0,360,40,completed?PlayerGreen:index==static_cast<size_t>(selectedChallenge)?Accent:unlocked?color:available?Fade(color,0.75f):Color{61,72,88,255});
+            DrawCircleV(p,nodeRadius-10*nodeScale,unlocked?color:Fade(color,0.32f));
+            if(completed) { DrawLineEx({p.x-9*nodeScale,p.y},{p.x-2*nodeScale,p.y+8*nodeScale},4*nodeScale,Background); DrawLineEx({p.x-2*nodeScale,p.y+8*nodeScale},{p.x+11*nodeScale,p.y-9*nodeScale},4*nodeScale,Background); }
+            else if(!unlocked) { DrawCircleLines(static_cast<int>(p.x),static_cast<int>(p.y+3*nodeScale),8*nodeScale,White); DrawRectangle(static_cast<int>(p.x-8*nodeScale),static_cast<int>(p.y+3*nodeScale),static_cast<int>(16*nodeScale),static_cast<int>(12*nodeScale),White); }
+            else DrawCircleV(p,7*nodeScale,Background);
+            float labelWidth=170*nodeScale,labelY=p.y+nodeRadius+7*nodeScale;
+            DrawRectangleRounded({p.x-labelWidth/2,labelY,labelWidth,25*nodeScale},0.25f,6,Color{8,13,21,225});
+            centered(challenge.name,p.x,labelY+5*nodeScale,10*nodeScale,unlocked||available?White:Muted);
+            if(challenge.branch!="START") {
+                float branchWidth=std::max(62.0f,MeasureTextEx(uiFont,challenge.branch.c_str(),9*nodeScale,0).x+18*nodeScale);
+                DrawRectangleRounded({p.x-branchWidth/2,p.y-nodeRadius-27*nodeScale,branchWidth,20*nodeScale},0.5f,6,Fade(color,0.18f));
+                centered(challenge.branch,p.x,p.y-nodeRadius-24*nodeScale,9*nodeScale,unlocked||available?color:Muted);
+            }
+        }
+        EndScissorMode();
+        box(zoomControls,Color{8,13,21,245},Border,0.12f);
+        if(button({zoomControls.x+4,zoomControls.y+3,36,28},"−",false,true,Accent,18)) zoomAt(1/1.2f,mapCenter);
+        if(button({zoomControls.x+44,zoomControls.y+3,78,28},"FIT",false,true,Accent,10)) fitChallengeMap(mapArea);
+        if(button({zoomControls.x+126,zoomControls.y+3,40,28},"+",false,true,Accent,18)) zoomAt(1.2f,mapCenter);
+        text(std::to_string(static_cast<int>(std::lround(challengeMapZoom*100)))+"%",mapArea.x+mapArea.width-242,mapArea.y+22,9,Muted);
+        text("Wheel: zoom  ·  hold LMB and drag: move",mapArea.x+18,mapArea.y+20,9,Muted);
+        box({994,98,418,759},Panel,Border,0.035f);
+        Color selectedColor=challengeColor(selectedDefinition.color);
+        text("SELECTED NODE",1020,122,9,Muted); text(selectedDefinition.name,1020,146,25,selectedColor);
+        bool unlocked=wallet.challengeUnlocked(selectedDefinition.id),completed=wallet.challengeCompleted(selectedDefinition.id),available=challengeRequirementsMet(selectedDefinition);
+        std::string status=completed?"COMPLETED":unlocked?"UNLOCKED":available?"AVAILABLE":"PATH LOCKED";
+        text(status,1021,181,11,completed?PlayerGreen:unlocked?Accent:available?selectedColor:Muted);
+        fitted("PATH  ·  "+selectedDefinition.branch,1190,181,196,10,selectedColor);
+        wrapped(selectedDefinition.description,1020,211,365,13,White,4);
+        DrawLineEx({1020,282},{1386,282},1,Border);
+        const std::array<std::pair<std::string,std::string>,4> facts={{{"SQUAD",std::to_string(selectedDefinition.requiredBalls)+" owned ball"+(selectedDefinition.requiredBalls==1?"":"s")},{"ENCOUNTER",selectedDefinition.encounterType},{"ARENA",selectedDefinition.arenaId.substr(6)},{"LIMIT",number(selectedDefinition.timeLimit)+" s"}}};
+        for(int n=0;n<4;++n) { float x=1020+(n%2)*184.0f,y=302+(n/2)*54.0f; text(facts[n].first,x,y,9,Muted); fitted(facts[n].second,x,y+18,170,14,White); }
+        text("OBJECTIVE",1020,417,9,Muted);
+        std::string objective=selectedDefinition.objectiveType;
+        std::replace(objective.begin(),objective.end(),'_',' ');
+        if(selectedDefinition.objectiveTarget>0) objective+="  /  "+number(selectedDefinition.objectiveTarget);
+        fitted(objective,1020,436,365,15,selectedColor);
+        text("OPPONENTS",1020,464,9,Muted);
+        std::vector<const ChallengeActor*> enemyActors;
+        for(const auto& actor:selectedDefinition.actors) if(actor.team=="enemy") for(int copy=0;copy<actor.count;++copy) enemyActors.push_back(&actor);
+        auto invasion=std::find_if(selectedDefinition.arenaObjects.begin(),selectedDefinition.arenaObjects.end(),[](const ChallengeArenaObject& object){return object.type=="mouse_spawner" || (object.type=="spawn_zone" && object.params.contains("mouse_invasion") && object.params.at("mouse_invasion")>0);});
+        bool mouseInvasion=invasion!=selectedDefinition.arenaObjects.end();
+        if(mouseInvasion) {
+            auto parameter=[&](const std::string& key,float fallback) { auto found=invasion->params.find(key); return found==invasion->params.end()?fallback:found->second; };
+            Rectangle card{1020,481,366,68}; box(card,PanelAlt,Border,0.08f); Vector2 mouseCentre{1049,515}; Color fur{207,178,176,255};
+            DrawCircleV({mouseCentre.x-7,mouseCentre.y-12},7,fur); DrawCircleV({mouseCentre.x+7,mouseCentre.y-12},7,fur); DrawCircleV(mouseCentre,19,fur); DrawCircleLinesV(mouseCentre,22,Coral);
+            DrawCircleV({mouseCentre.x-6,mouseCentre.y-2},2,Background); DrawCircleV({mouseCentre.x+6,mouseCentre.y-2},2,Background); DrawCircleV({mouseCentre.x,mouseCentre.y+7},2,Coral);
+            text("MOUSE INVASION",1077,490,11,White); text("1 MOUSE / "+number(parameter("interval",1),1)+" S",1077,510,9,Coral);
+            text("MAX "+number(parameter("max_count",20))+"  ·  RANGED TARGETS",1077,528,8,Muted);
+        }
+        size_t visibleEnemies=mouseInvasion?0:std::min<size_t>(2,std::min(enemyActors.size(),challengeEnemyPreview.size()));
+        float enemyCardWidth=visibleEnemies==1?366.0f:178.0f;
+        for(size_t index=0;index<visibleEnemies;++index) {
+            const ChallengeActor& actor=*enemyActors[index]; const Fighter& enemy=challengeEnemyPreview[index]; bool randomEnemy=actor.kind=="generated_fighter";
+            float x=1020+index*(enemyCardWidth+10),y=481; Rectangle card{x,y,enemyCardWidth,68};
+            Color body=enemy.actorKind=="wild_dog"?Color{145,91,48,255}:enemy.actorKind=="dummy"?Color{137,120,96,255}:enemy.actorKind=="boss"?Color{255,174,62,255}:Coral;
+            bool hover=!randomEnemy&&!inputBlocked&&inside(card); box(card,hover?Fade(body,0.13f):PanelAlt,hover?body:Border,0.08f);
+            if(randomEnemy) {
+                DrawCircleV({x+29,y+34},19,Fade(Coral,0.75f)); DrawCircleLines(static_cast<int>(x+29),static_cast<int>(y+34),19,White); centered("?",x+29,y+23,18,White);
+                fitted(actor.displayName.empty()?"RANDOM RIVAL":actor.displayName,x+57,y+9,enemyCardWidth-65,11,White);
+                text(actor.maxPoints>0?"UP TO "+std::to_string(actor.maxPoints)+" PTS":"RANDOM POINTS",x+57,y+29,9,Coral);
+                fitted("ROLLED WHEN FIGHT STARTS",x+57,y+47,enemyCardWidth-65,8,Muted);
+            } else {
+                if(enemy.actorKind=="boss") DrawCircleLines(static_cast<int>(x+29),static_cast<int>(y+34),22,Accent);
+                drawPortrait({x+29,y+34},17,body,appearanceFor(enemy.appearanceSeed,0),realClock);
+                fitted(enemy.name,x+57,y+8,enemyCardWidth-65,11,White);
+                fitted(std::to_string(enemy.points)+" PTS  ·  "+number(enemy.maxHp)+" HP",x+57,y+28,enemyCardWidth-65,9,body);
+                text("VIEW FULL INFO",x+57,y+47,8,hover?White:Muted);
+                offerBallPopover(enemy,card,body);
+                if(hover) { SetMouseCursor(MOUSE_CURSOR_POINTING_HAND); if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { openInspector(enemy,enemy.appearanceSeed,-1,-1,true,body); if(audioBank) audioBank->play(Cue::Click); } }
+            }
+        }
+        if(!mouseInvasion && enemyActors.size()>visibleEnemies) text("+"+std::to_string(enemyActors.size()-visibleEnemies)+" more",1340,464,8,Muted);
+        DrawLineEx({1020,558},{1386,558},1,Border);
+        if(!unlocked) {
+            text("REQUIREMENTS",1020,574,10,Muted); float y=597;
+            if(selectedDefinition.prerequisites.empty()) text("Starting node",1020,y,13,White);
+            for(const auto& prerequisite:selectedDefinition.prerequisites) {
+                const auto* required=challenges.find(prerequisite); bool done=wallet.challengeCompleted(prerequisite);
+                text(done?"OK":"--",1020,y,11,done?PlayerGreen:Muted); fitted(required?required->name:prerequisite,1043,y,335,13,done?White:Muted); y+=27;
+            }
+            text("UNLOCK COST",1020,657,9,Muted); text(std::to_string(selectedDefinition.unlockCost)+" COINS",1020,678,23,Accent);
+            if(button({1020,727,366,44},available?"UNLOCK CHALLENGE":"COMPLETE THE PREVIOUS PATH",true,available&&wallet.coins>=selectedDefinition.unlockCost,Accent,12)) {
+                if(wallet.unlockChallenge(selectedDefinition)) { persist(); challengeSquadSeeds.clear(); }
+            }
+            text("Completion and payment are both required for every branch.",1020,794,10,Muted);
+        } else {
+            text("SELECT YOUR SQUAD",1020,574,10,Muted);
+            text(std::to_string(challengeSquadSeeds.size())+" / "+std::to_string(selectedDefinition.requiredBalls)+" selected",1267,574,10,challengeSquadSeeds.size()==static_cast<size_t>(selectedDefinition.requiredBalls)?PlayerGreen:Muted);
+            for(size_t index=0;index<wallet.ownedBallSeeds.size();++index) {
+                uint32_t seed=wallet.ownedBallSeeds[index]; const auto& fighter=ownedBallCache[index]; int column=static_cast<int>(index%3),row=static_cast<int>(index/3);
+                float x=1020+column*123.0f,y=592+row*48.0f; Rectangle card{x,y,113,40}; bool chosen=std::find(challengeSquadSeeds.begin(),challengeSquadSeeds.end(),seed)!=challengeSquadSeeds.end();
+                bool hover=!inputBlocked && inside(card); box(card,chosen?Fade(PlayerGreen,0.22f):PanelAlt,chosen?PlayerGreen:Border,0.1f);
+                drawPortrait({x+20,y+20},11,PlayerGreen,appearanceFor(seed,0),realClock); fitted(fighter.name,x+38,y+6,69,9,White); text(chosen?"SELECTED":std::to_string(fighter.points)+" PTS",x+38,y+23,8,chosen?PlayerGreen:Muted);
+                offerBallPopover(fighter,card,PlayerGreen);
+                if(hover) {
+                    SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+                    if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        auto found=std::find(challengeSquadSeeds.begin(),challengeSquadSeeds.end(),seed);
+                        if(found!=challengeSquadSeeds.end()) challengeSquadSeeds.erase(found);
+                        else if(challengeSquadSeeds.size()<static_cast<size_t>(selectedDefinition.requiredBalls)) challengeSquadSeeds.push_back(seed);
+                        if(audioBank) audioBank->play(Cue::Click);
+                    }
+                }
+            }
+            if(wallet.ownedBallSeeds.empty()) centered("Buy your first ball in My Collection",1203,623,13,Muted);
+            bool ready=challengeSquadSeeds.size()==static_cast<size_t>(selectedDefinition.requiredBalls);
+            if(button({1020,797,366,44},ready?"START CHALLENGE  →":"SELECT "+std::to_string(selectedDefinition.requiredBalls)+" BALL"+(selectedDefinition.requiredBalls==1?"":"S"),true,ready,PlayerGreen,12)) startChallenge(selectedDefinition);
+        }
+        text("Challenge layouts are loaded from data/challenges.json.",28,895,11,Muted);
     }
     void ballInspector() {
         if(!inspectionOpen) return;
         DrawRectangle(0,0,Width,Height,Color{3,7,12,222}); inputBlocked=false;
         box({205,86,1030,768},Panel,Border,0.025f);
-        text("BALL INSPECTION",237,112,28);
+        text(inspectionChallengeEnemy?"CHALLENGE ENEMY":"BALL INSPECTION",237,112,28);
         if(button({1171,107,36,34},"×",false,true,Accent,22) || IsKeyPressed(KEY_ESCAPE)) { inspectionOpen=false; pendingRemove=-1; return; }
-        Color color=Team[inspectionSeed&1u]; Appearance look=appearanceFor(inspectionSeed,0);
+        Color color=inspectionColor; Appearance look=appearanceFor(inspectionSeed,0);
         box({237,170,280,314},PanelAlt,Border,0.05f);
+        if(inspectedBall.actorKind=="boss") { DrawCircleLines(377,293,68,Accent); DrawCircleLines(377,293,73,Fade(Coral,0.7f)); }
         drawPortrait({377,293},58,color,look,realClock);
         centered(inspectedBall.name+" "+inspectedBall.title,377,389,19,White);
         centered(std::to_string(inspectedBall.points)+" BALANCE PTS",377,426,12,color);
@@ -831,6 +1193,10 @@ struct App {
             box({548,y,650,91},PanelAlt,Border,0.04f); icon(item.effect,{578,y+30},item.category=="modifier"?Muted:color,0.9f);
             text(item.name,608,y+12,17); text(item.category+"  /  "+std::to_string(item.points)+" pts",608,y+38,10,Muted);
             wrapped(detail(item),608,y+59,570,10,White,2); y+=101;
+        }
+        if(inspectedBall.items.empty()) {
+            box({548,205,650,91},PanelAlt,Border,0.04f); text("NO CATALOG LOADOUT",578,224,17,Muted);
+            text(inspectedBall.stationary?"Stationary encounter actor":"Uses its built-in challenge behaviour",578,254,11,White);
         }
         if(inspectionMarket>=0) {
             int price=marketPrice(inspectedBall); bool room=wallet.ownedBallSeeds.size()<static_cast<size_t>(wallet.collectionSlots);
@@ -846,11 +1212,17 @@ struct App {
                 if(pendingRemove==inspectionOwned) { wallet.removeOwnedBall(static_cast<size_t>(inspectionOwned)); persist(); rebuildCollectionCache(); inspectionOpen=false; pendingRemove=-1; }
                 else pendingRemove=inspectionOwned;
             }
+        } else if(inspectionChallengeEnemy) {
+            std::string kind=inspectedBall.actorKind=="boss"?"BOSS":inspectedBall.actorKind=="wild_dog"?"BEAST":inspectedBall.actorKind=="dummy"?"DUMMY":"FIXED OPPONENT";
+            text(kind,237,536,10,color);
+            text("DAMAGE",237,566,9,Muted); text(number(inspectedBall.damageMultiplier,2)+"x",299,560,15,White);
+            text("CONTACT",364,566,9,Muted); text(number(std::max(0.0f,inspectedBall.contactDamage)),432,560,15,White);
+            if(inspectedBall.stationary || inspectedBall.harmless) text(std::string(inspectedBall.stationary?"STATIONARY":"")+(inspectedBall.stationary&&inspectedBall.harmless?"  ·  ":"")+(inspectedBall.harmless?"HARMLESS":""),237,596,10,Muted);
         }
         text("Seed "+std::to_string(inspectionSeed),237,811,10,Color{75,89,108,255});
     }
     void tooltip() {
-        if(!hovered || catalogOpen || rulesOpen || collectionOpen || inspectionOpen) return;
+        if(!hovered || catalogOpen || rulesOpen || collectionOpen || challengesOpen || inspectionOpen) return;
         const Item& i=*hovered; float x=std::clamp(mouse.x+18,20.0f,1050.0f),y=std::clamp(mouse.y+16,20.0f,Height-222.0f);
         box({x,y,365,202},Color{25,34,47,255},Muted,0.06f);
         text(i.name,x+16,y+14,20,Accent);
@@ -874,7 +1246,7 @@ struct App {
                 {"03 / Watch the fight","Fighters move automatically. Projectiles and traps cannot hurt their owner. Contact deals minor damage. Dash closes the gap; dodge reacts to incoming projectiles. Speed changes never affect the countdown."},
                 {"04 / Draw rule","There is no overtime damage. The fight lasts at most "+number(catalog.rules.limit)+" s. If both fighters survive the limit or die in the same step, the match is a draw and your stake is refunded."},
                 {"05 / Balance is a starting point","Matchmaking pairs loadouts with similar point totals. Equal costs do not guarantee equal odds: weapon combinations and arena geometry matter. Edit data/catalog.json and press F5 outside a match."},
-                {"06 / Collection and saving","Spend winnings in My Collection. Unlock up to 12 slots, inspect or buy one of three persistent market offers, and refresh all offers for 1000 coins. Space starts or pauses; 1–5 changes speed; M mutes. Your collection survives a new season."}
+                {"06 / Collection and challenges","Spend winnings in My Collection. Player-owned balls are green. Challenge nodes require the previous path to be completed, an unlock payment, and a squad of 1–5 owned balls. Collection and challenge progress survive a new season."}
             };
             float y=177;
             for(const auto& [title,body]:paragraphs) { text(title,218,y,18,Accent); wrapped(body,218,y+29,986,15,Muted,3); y+=104; }
@@ -947,33 +1319,35 @@ struct App {
     }
     void draw() {
         inputBlocked=catalogOpen || rulesOpen || inspectionOpen;
-        hovered=nullptr; SetMouseCursor(MOUSE_CURSOR_DEFAULT); ClearBackground(Background);
+        hovered=nullptr; ballPopoverActive=false; SetMouseCursor(MOUSE_CURSOR_DEFAULT); ClearBackground(Background);
         DrawCircle(43,40,12,Accent); DrawCircle(43,40,5,Background);
         text("ORBITAL",65,24,26); text("ODDS",182,24,26,Accent);
-        if(button({276,23,124,34},"ARENA",!collectionOpen,!live(),Accent,11)) { collectionOpen=false; inspectionOpen=false; pendingRemove=-1; }
-        if(button({408,23,148,34},"MY COLLECTION",collectionOpen,!live(),Accent,11)) { collectionOpen=true; catalogOpen=false; rulesOpen=false; }
+        if(button({276,23,92,34},"ARENA",!collectionOpen&&!challengesOpen,!live()&&!challengeBattleOpen,Accent,10)) { collectionOpen=false; challengesOpen=false; inspectionOpen=false; pendingRemove=-1; }
+        if(button({376,23,132,34},"MY COLLECTION",collectionOpen,!live()&&!challengeBattleOpen,Accent,10)) { collectionOpen=true; challengesOpen=false; catalogOpen=false; rulesOpen=false; }
+        if(button({516,23,116,34},"CHALLENGES",challengesOpen,!live()&&!challengeBattleOpen,Accent,10)) { challengesOpen=true; collectionOpen=false; inspectionOpen=false; catalogOpen=false; rulesOpen=false; }
         if(audioBank) {
-            if(button({570,24,90,32},!audioBank->ready?"NO AUDIO":audioBank->muted?"MUTED":"SFX ON",false,audioBank->ready,Accent,10)) {
+            if(button({646,24,82,32},!audioBank->ready?"NO AUDIO":audioBank->muted?"MUTED":"SFX ON",false,audioBank->ready,Accent,9)) {
                 audioBank->setMuted(!audioBank->muted); saveAudio(); audioBank->play(Cue::Click);
             }
-            Rectangle slider{672,24,82,32};
+            Rectangle slider{738,24,61,32};
             if(!inputBlocked && audioBank->ready && inside(slider)) {
                 SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
                 if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) volumeDragging=true;
             }
             if(volumeDragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) { audioBank->setVolume((mouse.x-slider.x)/slider.width); audioBank->setMuted(false); }
             if(volumeDragging && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) { volumeDragging=false; saveAudio(); }
-            DrawRectangleRounded({672,38,82,4},1,6,Border);
-            DrawRectangleRounded({672,38,82*audioBank->volume,4},1,6,audioBank->muted?Muted:Accent);
-            DrawCircleV({672+82*audioBank->volume,40},5,audioBank->muted?Muted:Accent);
+            DrawRectangleRounded({738,38,61,4},1,6,Border);
+            DrawRectangleRounded({738,38,61*audioBank->volume,4},1,6,audioBank->muted?Muted:Accent);
+            DrawCircleV({738+61*audioBank->volume,40},5,audioBank->muted?Muted:Accent);
         }
-        if(button({770,24,83,32},"Rules",rulesOpen,true,Accent,11)) rulesOpen=!rulesOpen;
-        if(button({862,24,93,32},"Catalog",catalogOpen,true,Accent,11)) catalogOpen=!catalogOpen;
-        if constexpr(ShowDebugAddCoins) if(button({966,24,111,32},"ADD 10K",false,true,Coral,11)) { wallet.coins=std::min(1000000000,wallet.coins+10000); persist(); }
+        if(button({813,24,76,32},"Rules",rulesOpen,true,Accent,10)) rulesOpen=!rulesOpen;
+        if(button({897,24,82,32},"Catalog",catalogOpen,true,Accent,10)) catalogOpen=!catalogOpen;
+        if constexpr(ShowDebugAddCoins) if(button({990,24,103,32},"ADD 10K",false,true,Coral,10)) { wallet.coins=std::min(1000000000,wallet.coins+10000); persist(); }
         box({1169,18,243,45},PanelAlt,Border,0.2f);
         DrawCircle(1193,40,7,Accent); text(std::to_string(wallet.coins),1212,25,23,Accent); text("COINS",1348,34,10,Muted);
         DrawLine(28,77,1412,77,Border);
-        if(collectionOpen) collectionScreen();
+        if(challengesOpen) challengesScreen();
+        else if(collectionOpen) collectionScreen();
         else {
             text("MATCH #"+std::to_string(wallet.rounds+(sim&&sim->finished?0:1)),28,99,12,Accent);
             text("Small arena. Big personalities.",28,120,29);
@@ -985,7 +1359,7 @@ struct App {
             text("F5  reload balance   ·   SPACE  start / pause   ·   1–5  speed   ·   M  mute",28,907,11,Muted);
             text("Virtual coins only.",1210,907,10,Muted);
         }
-        tooltip(); modal(); ballInspector();
+        ballStatsPopover(); tooltip(); modal(); ballInspector();
         if(!error.empty()) {
             box({340,84,760,66},PanelAlt,Accent,0.08f); wrapped(error,355,95,704,14,White,2);
             if(button({1061,98,27,28},"×",false,true,Accent,18)) error.clear();
@@ -1049,6 +1423,7 @@ int main(int argc,char** argv) {
         if(smoke) {
             auto smokeRoot=root/"build/smoke"; std::filesystem::create_directories(smokeRoot/"data");
             std::filesystem::copy_file(root/"data/catalog.json",smokeRoot/"data/catalog.json",std::filesystem::copy_options::overwrite_existing);
+            std::filesystem::copy_file(root/"data/challenges.json",smokeRoot/"data/challenges.json",std::filesystem::copy_options::overwrite_existing);
             root=smokeRoot;
         }
         App app(root); int frame=0;
@@ -1061,7 +1436,7 @@ int main(int argc,char** argv) {
             audioBank->setMuted(false); SetMasterVolume(0); audioBank->play(Cue::Fight);
             verify(audioBank->isPlaying(Cue::Fight),"Audio backend did not start playback"); audioBank->setMuted(true);
         }
-        const char* smokeFiles[]={"preview.png","countdown-3.png","countdown-2.png","countdown-1.png","fight.png","live.png","result.png","catalog.png","styles.png","rules.png","collection.png","ball-inspection.png"};
+        const char* smokeFiles[]={"preview.png","countdown-3.png","countdown-2.png","countdown-1.png","fight.png","live.png","result.png","catalog.png","styles.png","rules.png","collection.png","ball-inspection.png","challenges.png","challenge-boss.png","challenge-enemy-inspection.png","challenge-countdown.png","challenge-live.png","challenge-result.png"};
         while(!WindowShouldClose()) {
             float scale=std::min(GetScreenWidth()/static_cast<float>(Width),GetScreenHeight()/static_cast<float>(Height));
             float ox=(GetScreenWidth()-Width*scale)/2,oy=(GetScreenHeight()-Height*scale)/2;
@@ -1070,7 +1445,7 @@ int main(int argc,char** argv) {
                 mouse={-100,-100};
                 if(frame==0) {
                     app.wallet=Wallet{}; app.wallet.coins=app.catalog.rules.startingCoins; app.persist();
-                    app.ensureMarket(); app.rebuildCollectionCache(); app.persist();
+                    app.ensureMarket(); app.ensureChallengeRoots(); app.rebuildCollectionCache(); app.persist();
                     app.preview=generateMatch(app.catalog,482031); app.stake=100;
                     for(int k=0;k<2;++k) app.appearances[k]=appearanceFor(app.preview.seed,k);
                 }
@@ -1106,10 +1481,38 @@ int main(int argc,char** argv) {
                     verify(app.wallet.unlockCollectionSlot() && app.wallet.unlockCollectionSlot(),"Collection slots did not unlock");
                     int price=marketPrice(app.marketBallCache[0]); verify(app.wallet.buyMarketBall(0,price),"Market ball could not be purchased");
                     app.rebuildCollectionCache(); app.persist();
+                    mouse={80,240};
                 }
                 if(frame==11) { app.openInspector(app.marketBallCache[1],app.wallet.marketBallSeeds[1],1,-1); }
+                if(frame==12) { app.inspectionOpen=false; app.collectionOpen=false; app.challengesOpen=true; mouse={1050,610}; }
+                if(frame==13) {
+                    auto boss=std::find_if(app.challenges.challenges.begin(),app.challenges.challenges.end(),[](const ChallengeDefinition& challenge){return challenge.id=="challenge.twinblade_titan";});
+                    verify(boss!=app.challenges.challenges.end(),"Boss challenge is missing"); app.selectedChallenge=static_cast<int>(boss-app.challenges.challenges.begin()); app.challengeEnemyPreviewIndex=-1;
+                    mouse={1100,515};
+                }
+                if(frame==14) {
+                    verify(app.challengeEnemyPreview.size()==1 && app.challengeEnemyPreview[0].actorKind=="boss" && app.challengeEnemyPreview[0].maxHp==500,"Boss preview is incomplete");
+                    const auto& boss=app.challengeEnemyPreview[0]; app.openInspector(boss,boss.appearanceSeed,-1,-1,true,Color{255,174,62,255});
+                }
+                if(frame==15) {
+                    app.inspectionOpen=false; app.selectedChallenge=0; app.challengeEnemyPreviewIndex=-1;
+                    app.challengeSquadSeeds={app.wallet.ownedBallSeeds.front()};
+                    app.startChallenge(*app.challenges.find("challenge.first_spark"));
+                    verify(app.challengeBattleOpen && app.sim && app.sim->match.challenge,"Challenge fight did not start");
+                }
+                if(frame==16) {
+                    for(int n=0;n<240;++n) app.update(1.0f/60);
+                    verify(!app.countdown.active() && app.sim->time>0,"Challenge countdown did not enter live combat");
+                }
+                if(frame==17) {
+                    for(auto& fighter:app.sim->match.fighters) if(fighter.team==1) fighter.hp=0;
+                    app.hitStop=0; app.update(1.0f/60);
+                    verify(app.sim->finished && app.sim->winner==0 && app.wallet.challengeCompleted("challenge.first_spark"),"Challenge victory was not completed and saved");
+                    app.resultAge=0.55f;
+                }
             } else app.update(GetFrameTime());
             BeginTextureMode(canvas); if(smoke && frame==8) styleSheet(); else app.draw(); EndTextureMode();
+            if(smoke && (frame==10 || frame==12 || frame==13)) verify(app.ballPopoverActive,"Ball stats popover did not activate on hover");
             BeginDrawing(); ClearBackground(BLACK);
             DrawTexturePro(canvas.texture,{0,0,static_cast<float>(Width),-static_cast<float>(Height)},
                 {ox,oy,Width*scale,Height*scale},{0,0},0,WHITE);
@@ -1122,7 +1525,7 @@ int main(int argc,char** argv) {
                 if(!png || bytes<=0) throw std::runtime_error("Screenshot encoding failed");
                 std::ofstream output(file,std::ios::binary); output.write(reinterpret_cast<const char*>(png),bytes); MemFree(png);
                 if(!output.good()) throw std::runtime_error("Screenshot write failed");
-                if(++frame==12) { std::cout<<"Smoke render OK: 12 screens; countdown, pause, 16x, settlement, collection OK; audio device "<<(audioBank->ready?"ready":"unavailable")<<"; "<<root.string()<<"\n"; break; }
+                if(++frame==18) { std::cout<<"Smoke render OK: 18 screens; betting, collection, draggable challenge map, enemy previews and playable challenge combat OK; audio device "<<(audioBank->ready?"ready":"unavailable")<<"; "<<root.string()<<"\n"; break; }
             }
         }
     } catch(const std::exception& e) {

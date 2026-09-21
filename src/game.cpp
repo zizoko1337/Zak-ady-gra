@@ -1,6 +1,7 @@
 #include "game.hpp"
 #include <algorithm>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <numeric>
 #include <set>
@@ -178,6 +179,75 @@ Catalog Catalog::load(const std::filesystem::path& path) {
     require(!c.arenas.empty(),"The catalog must contain an arena.");
     return c;
 }
+ChallengeCatalog ChallengeCatalog::load(const std::filesystem::path& path,const Catalog& catalog) {
+    std::ifstream stream(path); require(stream.good(),"Cannot open data/challenges.json.");
+    json root; stream>>root; require(root.at("schema_version")==1,"Unsupported challenge schema version.");
+    require(root.contains("challenges") && root.at("challenges").is_array(),"Challenges must be an array.");
+    std::set<std::string> arenaIds,itemIds,ids;
+    for(const auto& arena:catalog.arenas) arenaIds.insert(arena.id);
+    for(const auto& item:catalog.items) itemIds.insert(item.id);
+    ChallengeCatalog result;
+    auto position=[](const json& value,const std::string& label) {
+        require(value.is_array() && value.size()==2,label+" must contain x and y.");
+        Vec p{value.at(0).get<float>(),value.at(1).get<float>()};
+        require(std::isfinite(p.x) && std::isfinite(p.y) && std::abs(p.x)<=1000 && std::abs(p.y)<=1000,label+" is outside supported bounds.");
+        return p;
+    };
+    const std::set<std::string> colors={"red","green","blue","purple","yellow","cyan","orange"};
+    const std::set<std::string> encounters={"duel","survival","damage_race","boss","teamfight","beast_hunt"};
+    const std::set<std::string> objectives={"defeat_all","survive","deal_damage","protect","reach_zone"};
+    const std::set<std::string> actorKinds={"generated_fighter","boss","beast","custom","dummy"};
+    const std::set<std::string> teams={"enemy","ally","neutral"};
+    const std::set<std::string> objectKinds={"mine","spike","healing_zone","damage_zone","wall","spawn_zone","mouse_spawner"};
+    for(const auto& entry:root.at("challenges")) {
+        ChallengeDefinition challenge;
+        challenge.id=entry.at("id"); challenge.name=entry.at("name"); challenge.description=entry.at("description"); challenge.color=entry.at("color"); challenge.branch=entry.value("branch","Unsorted");
+        challenge.prerequisites=entry.value("prerequisites",std::vector<std::string>{}); challenge.unlockCost=entry.at("unlock_cost"); challenge.requiredBalls=entry.at("required_balls");
+        const auto& map=entry.at("map"); challenge.mapX=map.at("x"); challenge.mapY=map.at("y");
+        const auto& encounter=entry.at("encounter"); challenge.encounterType=encounter.at("type"); challenge.arenaId=encounter.at("arena_id"); challenge.arenaEffect=encounter.value("arena_effect",""); challenge.timeLimit=encounter.at("time_limit");
+        const auto& objective=encounter.at("objective"); challenge.objectiveType=objective.at("type"); challenge.objectiveTarget=objective.value("target",0.0f);
+        require(!challenge.id.empty() && challenge.id.size()<=80 && ids.insert(challenge.id).second,"Duplicate or invalid challenge ID.");
+        require(!challenge.name.empty() && challenge.name.size()<=80 && !challenge.description.empty() && challenge.description.size()<=300 && !challenge.branch.empty() && challenge.branch.size()<=40,"Invalid challenge text: "+challenge.id);
+        require(colors.contains(challenge.color) && encounters.contains(challenge.encounterType) && objectives.contains(challenge.objectiveType),"Unknown challenge presentation, encounter, or objective type: "+challenge.id);
+        require(challenge.unlockCost>=0 && challenge.unlockCost<=100000000 && challenge.requiredBalls>=1 && challenge.requiredBalls<=5,"Invalid challenge cost or team size: "+challenge.id);
+        require(std::isfinite(challenge.mapX) && std::isfinite(challenge.mapY) && std::abs(challenge.mapX)<=10000 && std::abs(challenge.mapY)<=10000,"Challenge map coordinates are outside supported bounds: "+challenge.id);
+        require(arenaIds.contains(challenge.arenaId) && (challenge.arenaEffect.empty() || challenge.arenaEffect=="spiked_arena" || challenge.arenaEffect=="center_gravity" || challenge.arenaEffect=="healing_arena"),"Unknown challenge arena setup: "+challenge.id);
+        require(std::isfinite(challenge.timeLimit) && challenge.timeLimit>=5 && challenge.timeLimit<=600 && std::isfinite(challenge.objectiveTarget) && challenge.objectiveTarget>=0 && challenge.objectiveTarget<=100000,"Invalid challenge objective values: "+challenge.id);
+        for(const auto& actorJson:encounter.value("actors",json::array())) {
+            ChallengeActor actor; actor.id=actorJson.at("id"); actor.displayName=actorJson.value("display_name",""); actor.kind=actorJson.at("kind"); actor.team=actorJson.at("team"); actor.count=actorJson.value("count",1); actor.maxPoints=actorJson.value("max_points",0); actor.seed=actorJson.value("seed",0u);
+            actor.position=position(actorJson.value("position",json::array({0,0})),"Actor position"); actor.hpMultiplier=actorJson.value("hp_multiplier",1.0f); actor.damageMultiplier=actorJson.value("damage_multiplier",1.0f); actor.sizeMultiplier=actorJson.value("size_multiplier",1.0f); actor.loadout=actorJson.value("loadout",std::vector<std::string>{});
+            require(!actor.id.empty() && actor.displayName.size()<=80 && actorKinds.contains(actor.kind) && teams.contains(actor.team) && actor.count>=1 && actor.count<=50 && actor.maxPoints>=0 && actor.maxPoints<=10000,"Invalid actor in challenge: "+challenge.id);
+            require(actor.hpMultiplier>0 && actor.hpMultiplier<=100 && actor.damageMultiplier>0 && actor.damageMultiplier<=100 && actor.sizeMultiplier>0.1f && actor.sizeMultiplier<=10,"Invalid actor multipliers: "+actor.id);
+            for(const auto& item:actor.loadout) require(itemIds.contains(item),"Unknown actor loadout item: "+item);
+            challenge.actors.push_back(std::move(actor));
+        }
+        for(const auto& objectJson:encounter.value("arena_objects",json::array())) {
+            ChallengeArenaObject object; object.type=objectJson.at("type"); object.position=position(objectJson.at("position"),"Arena object position"); object.params=objectJson.value("params",std::map<std::string,float>{});
+            require(objectKinds.contains(object.type),"Unknown arena object type: "+object.type);
+            for(const auto& [key,value]:object.params) require(!key.empty() && std::isfinite(value) && value>=0 && value<=100000,"Invalid arena object parameter.");
+            challenge.arenaObjects.push_back(std::move(object));
+        }
+        result.challenges.push_back(std::move(challenge));
+    }
+    require(!result.challenges.empty(),"Challenge map cannot be empty.");
+    int roots=0;
+    for(const auto& challenge:result.challenges) {
+        if(challenge.prerequisites.empty()) { ++roots; require(challenge.unlockCost==0,"Starting challenges must be free."); }
+        for(const auto& prerequisite:challenge.prerequisites) require(ids.contains(prerequisite) && prerequisite!=challenge.id,"Unknown or self-referencing prerequisite: "+prerequisite);
+    }
+    require(roots>=1,"Challenge map needs a starting node.");
+    std::map<std::string,int> state;
+    std::function<void(const ChallengeDefinition&)> visit=[&](const ChallengeDefinition& challenge) {
+        require(state[challenge.id]!=1,"Challenge prerequisite graph contains a cycle."); if(state[challenge.id]==2) return;
+        state[challenge.id]=1; for(const auto& id:challenge.prerequisites) visit(*result.find(id)); state[challenge.id]=2;
+    };
+    for(const auto& challenge:result.challenges) visit(challenge);
+    return result;
+}
+const ChallengeDefinition* ChallengeCatalog::find(const std::string& id) const {
+    auto found=std::find_if(challenges.begin(),challenges.end(),[&](const ChallengeDefinition& challenge){return challenge.id==id;});
+    return found==challenges.end()?nullptr:&*found;
+}
 const Item* Fighter::effect(const std::string& value) const {
     for(const auto& i:items) if(i.effect==value) return &i;
     return nullptr;
@@ -217,6 +287,22 @@ static Fighter rollFighter(const Catalog& c,std::mt19937& rng) {
     }
     return f;
 }
+static void prepareFighter(Fighter& f,const Catalog& c) {
+    f.maxHp=c.rules.hp; f.speed=c.rules.speed; f.radius=c.rules.radius; f.damageMultiplier=1; f.armor=0; f.points=0;
+    for(const auto& item:f.items) {
+        f.points+=item.points;
+        if(item.effect=="stats") {
+            f.maxHp*=item.get("hp_multiplier",1); f.speed*=item.get("speed_multiplier",1);
+            f.radius*=item.get("radius_multiplier",1); f.damageMultiplier*=item.get("damage_multiplier",1);
+            f.armor=1-(1-f.armor)*(1-item.get("armor"));
+        }
+    }
+    f.maxHp=std::clamp(f.maxHp,5.0f,4000.0f); f.speed=std::clamp(f.speed,30.0f,650.0f);
+    f.radius=std::clamp(f.radius,6.0f,40.0f); f.armor=std::clamp(f.armor,0.0f,0.8f);
+    f.damageMultiplier=std::clamp(f.damageMultiplier,0.1f,6.0f); f.hp=f.maxHp;
+    f.cooldowns.assign(f.items.size(),0); f.hitCooldowns.assign(f.items.size(),0);
+    f.meleeAngles.assign(f.items.size(),f.angle); f.meleeDirections.assign(f.items.size(),1); f.meleeClashCooldowns.assign(f.items.size(),0);
+}
 Match generateMatch(const Catalog& c,uint32_t seed) {
     std::mt19937 rng(seed); Match m; m.seed=seed;
     std::vector<int> weights; for(const auto& a:c.arenas) weights.push_back(a.weight);
@@ -245,6 +331,7 @@ Match generateMatch(const Catalog& c,uint32_t seed) {
     m.fighters[0].name=names[a]; m.fighters[1].name=names[b];
     for(int k=0;k<2;++k) {
         auto& f=m.fighters[k]; f.position={k==0?-95.0f:95.0f,0}; f.previous=f.position;
+        f.team=k; f.appearanceSeed=mix32(seed^static_cast<uint32_t>((k+1)*0x9e3779b9u));
         f.title=titleForItem(f.items[rng()%f.items.size()]);
         float angle=std::uniform_real_distribution<float>(0,2*Pi)(rng);
         f.velocity=Vec{std::cos(angle),std::sin(angle)}*f.speed; f.angle=angle;
@@ -254,7 +341,73 @@ Match generateMatch(const Catalog& c,uint32_t seed) {
 }
 Fighter generateBall(const Catalog& c,uint32_t seed) {
     Match match=generateMatch(c,seed);
-    return match.fighters[(seed>>31)&1u];
+    Fighter fighter=match.fighters[(seed>>31)&1u]; fighter.appearanceSeed=seed; fighter.team=0; return fighter;
+}
+Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,const std::vector<uint32_t>& playerSeeds,uint32_t encounterSeed) {
+    require(playerSeeds.size()==static_cast<size_t>(challenge.requiredBalls),"Challenge squad size does not match its requirement.");
+    Match match; match.fighters.clear(); match.seed=encounterSeed; match.challenge=true; match.challengeId=challenge.id;
+    match.objectiveType=challenge.objectiveType; match.objectiveTarget=challenge.objectiveTarget;
+    auto arena=std::find_if(c.arenas.begin(),c.arenas.end(),[&](const Arena& value){ return value.id==challenge.arenaId; });
+    require(arena!=c.arenas.end(),"Challenge arena does not exist: "+challenge.arenaId); match.arena=*arena; match.arena.effect=challenge.arenaEffect;
+    for(const auto& object:challenge.arenaObjects) if(object.type=="mouse_spawner" || (object.type=="spawn_zone" && object.params.contains("mouse_invasion") && object.params.at("mouse_invasion")>0)) {
+        auto value=[&](const std::string& key,float fallback) { auto found=object.params.find(key); return found==object.params.end()?fallback:found->second; };
+        match.mouseInvasion.enabled=true; match.mouseInvasion.interval=value("interval",1); match.mouseInvasion.maxCount=static_cast<int>(std::lround(value("max_count",20)));
+        match.mouseInvasion.hp=value("hp",1); match.mouseInvasion.radius=value("radius",7); match.mouseInvasion.speed=value("speed",165);
+        match.mouseInvasion.damage=value("damage",5); match.mouseInvasion.biteCooldown=value("bite_cooldown",2);
+        require(match.mouseInvasion.interval>=0.1f && match.mouseInvasion.interval<=60 && match.mouseInvasion.maxCount>=1 && match.mouseInvasion.maxCount<=120,"Invalid Mouse Invasion spawn rate or limit.");
+        require(match.mouseInvasion.hp>0 && match.mouseInvasion.hp<=10000 && match.mouseInvasion.radius>=2 && match.mouseInvasion.radius<=40 && match.mouseInvasion.speed>0 && match.mouseInvasion.speed<=1000 && match.mouseInvasion.damage>=0 && match.mouseInvasion.damage<=1000 && match.mouseInvasion.biteCooldown>=0.1f && match.mouseInvasion.biteCooldown<=60,"Invalid Mouse Invasion mouse stats.");
+    }
+    std::mt19937 rng(encounterSeed);
+    const std::array<std::string,12> rivalNames={"ASH","BOLT","CLAW","DUSK","ECHO","FANG","HEX","MOSS","ROOK","SCAR","TALON","VOID"};
+    for(size_t index=0;index<playerSeeds.size();++index) {
+        Fighter fighter=generateBall(c,playerSeeds[index]); fighter.team=0; fighter.actorKind="fighter"; fighter.appearanceSeed=playerSeeds[index];
+        fighter.position={-130.0f,(static_cast<float>(index)-(playerSeeds.size()-1)*0.5f)*90.0f}; fighter.previous=fighter.position;
+        float angle=std::uniform_real_distribution<float>(-0.6f,0.6f)(rng); fighter.velocity={std::cos(angle)*fighter.speed,std::sin(angle)*fighter.speed};
+        match.fighters.push_back(std::move(fighter));
+    }
+    int enemyIndex=0;
+    for(const auto& actor:challenge.actors) for(int copy=0;copy<actor.count;++copy) {
+        if(actor.team=="ally") continue;
+        Fighter fighter;
+        uint32_t seed=actor.seed?actor.seed+static_cast<uint32_t>(copy):rng();
+        if(actor.kind=="generated_fighter") {
+            int attempts=0;
+            do { fighter=generateBall(c,seed); if(actor.maxPoints<=0 || fighter.points<=actor.maxPoints) break; seed=rng(); } while(++attempts<10000);
+            require(actor.maxPoints<=0 || fighter.points<=actor.maxPoints,"Could not generate a challenge opponent inside its point limit.");
+        } else if(actor.kind=="dummy") {
+            fighter.name="DAMAGE DUMMY"; fighter.title="the Unmoving"; fighter.actorKind="dummy"; fighter.stationary=true; fighter.harmless=true;
+            fighter.maxHp=fighter.hp=100000; fighter.speed=0; fighter.radius=28; fighter.contactDamage=0;
+        } else if(actor.kind=="beast" && actor.id=="wild_dog") {
+            fighter.name="WILD DOG"; fighter.title="the Small Beast"; fighter.actorKind="wild_dog";
+            fighter.maxHp=fighter.hp=120; fighter.speed=165; fighter.radius=20; fighter.contactDamage=10; fighter.specialCooldown=2;
+        } else {
+            fighter.actorKind=actor.kind=="custom"?"fighter":actor.kind;
+            for(const auto& id:actor.loadout) {
+                auto item=std::find_if(c.items.begin(),c.items.end(),[&](const Item& value){ return value.id==id; });
+                require(item!=c.items.end(),"Challenge loadout item does not exist: "+id); fighter.items.push_back(*item);
+            }
+            prepareFighter(fighter,c);
+        }
+        if(actor.id=="mouse_invasion_controller") {
+            fighter.name="MOUSE INVASION"; fighter.title="the Swarm"; fighter.actorKind="mouse_spawner";
+            fighter.stationary=false; fighter.harmless=true; fighter.hidden=true; fighter.untargetable=true; fighter.speed=900; fighter.radius=1;
+        }
+        if(!actor.displayName.empty()) fighter.name=actor.displayName;
+        if(fighter.name.empty()) fighter.name=rivalNames[enemyIndex%rivalNames.size()];
+        if(fighter.title.empty()) fighter.title=fighter.items.empty()?"the Challenger":titleForItem(fighter.items[rng()%fighter.items.size()]);
+        fighter.team=1; fighter.appearanceSeed=seed; fighter.maxHp*=actor.hpMultiplier; fighter.hp=fighter.maxHp;
+        fighter.damageMultiplier*=actor.damageMultiplier; fighter.radius*=actor.sizeMultiplier;
+        float fallbackY=(enemyIndex-(static_cast<int>(challenge.actors.size())-1)*0.5f)*90.0f;
+        fighter.position=actor.id=="mouse_invasion_controller"?Vec{}:actor.position;
+        if(length(fighter.position)<0.01f && !fighter.stationary) fighter.position={130.0f,fallbackY};
+        if(actor.count>1) fighter.position.y+=(copy-(actor.count-1)*0.5f)*80.0f;
+        fighter.previous=fighter.position;
+        if(!fighter.stationary) { float angle=Pi+std::uniform_real_distribution<float>(-0.6f,0.6f)(rng); fighter.velocity={std::cos(angle)*fighter.speed,std::sin(angle)*fighter.speed}; fighter.angle=angle; }
+        for(size_t slot=0;slot<fighter.items.size();++slot) fighter.cooldowns[slot]=fighter.items[slot].get("cooldown",1)*std::uniform_real_distribution<float>(0.25f,0.65f)(rng);
+        match.fighters.push_back(std::move(fighter)); ++enemyIndex;
+    }
+    require(!match.fighters.empty() && (match.mouseInvasion.enabled || std::ranges::any_of(match.fighters,[](const Fighter& fighter){ return fighter.team==1; })),"Challenge requires an enemy actor or arena invasion.");
+    return match;
 }
 int marketPrice(const Fighter& fighter) {
     int raw=1000+std::max(0,fighter.points)*20;
@@ -271,15 +424,36 @@ static Item fallbackMinionWeapon(uint32_t seed,int owner) {
     }
     return item;
 }
-static Minion* closerEnemyMinion(std::vector<Minion>& minions,int owner,Vec from,float closerThan) {
+static Minion* closerEnemyMinion(std::vector<Minion>& minions,const std::vector<Fighter>& fighters,int owner,Vec from,float closerThan) {
     Minion* closest=nullptr;
-    for(auto& minion:minions) if(minion.owner!=owner && minion.hp>0) {
+    for(auto& minion:minions) if(minion.owner>=0 && minion.owner<static_cast<int>(fighters.size()) && fighters[minion.owner].team!=fighters[owner].team && minion.hp>0) {
         float distance=length(minion.position-from);
         if(distance<closerThan) { closerThan=distance; closest=&minion; }
     }
     return closest;
 }
+static SummonedMouse* closerTargetableMouse(std::vector<SummonedMouse>& mice,const std::vector<Fighter>& fighters,int owner,Vec from,float closerThan) {
+    SummonedMouse* closest=nullptr;
+    for(auto& mouse:mice) if(mouse.targetable && mouse.owner>=0 && mouse.owner<static_cast<int>(fighters.size()) && fighters[mouse.owner].team!=fighters[owner].team && mouse.hp>0) {
+        float distance=length(mouse.position-from);
+        if(distance<closerThan) { closerThan=distance; closest=&mouse; }
+    }
+    return closest;
+}
 Simulation::Simulation(const Match& m,const Rules& r):match(m),rules(r) {
+    if(match.mouseInvasion.enabled) {
+        auto existing=std::find_if(match.fighters.begin(),match.fighters.end(),[](const Fighter& fighter){return fighter.actorKind=="mouse_spawner";});
+        if(existing!=match.fighters.end()) invasionMouseOwner=static_cast<int>(existing-match.fighters.begin());
+        else {
+            Fighter controller; controller.name="MOUSE INVASION"; controller.title="the Swarm"; controller.actorKind="mouse_spawner"; controller.team=1;
+            controller.maxHp=controller.hp=100000; controller.speed=900; controller.radius=1; controller.position=controller.previous={130,0};
+            controller.velocity={-controller.speed,0}; controller.stationary=false; controller.harmless=true; controller.hidden=true; controller.untargetable=true;
+            match.fighters.push_back(controller); invasionMouseOwner=static_cast<int>(match.fighters.size())-1;
+        }
+        invasionMouseTimer=match.mouseInvasion.interval;
+    }
+    bodies.resize(match.fighters.size()); damageFields.resize(match.fighters.size());
+    contactCooldowns.assign(match.fighters.size()*match.fighters.size(),0);
     auto wd=b2DefaultWorldDef(); wd.gravity={0,0}; wd.enableSleep=false; wd.restitutionThreshold=0;
     world=b2CreateWorld(&wd);
     auto sd=b2DefaultShapeDef(); sd.material.friction=0; sd.material.restitution=1;
@@ -291,29 +465,32 @@ Simulation::Simulation(const Match& m,const Rules& r):match(m),rules(r) {
         b2Polygon box=b2MakeOffsetBox(length(d)/80+0.07f,0.1f,physics((a+b)*0.5f+outward*4),b2MakeRot(std::atan2(d.y,d.x)));
         b2CreatePolygonShape(wall,&sd,&box);
     }
-    for(int k=0;k<2;++k) {
+    for(int k=0;k<static_cast<int>(match.fighters.size());++k) {
         auto& f=match.fighters[k];
         f.cooldowns.resize(f.items.size()); f.hitCooldowns.resize(f.items.size());
         f.meleeAngles.resize(f.items.size(),f.angle); f.meleeDirections.resize(f.items.size(),1); f.meleeClashCooldowns.resize(f.items.size());
-        int meleeNumber=0; std::map<std::string,size_t> firstRangedCopy;
+        int meleeNumber=0; std::map<std::string,std::pair<size_t,int>> rangedCopies;
         for(size_t n=0;n<f.items.size();++n) {
             const auto& item=f.items[n];
             if(item.effect=="sword") {
                 // A second melee weapon starts half an orbit away, so the two blades are readable and staggered.
                 f.meleeAngles[n]=std::remainder(f.angle+(meleeNumber++?Pi:0),2*Pi);
             } else if(item.category=="weapon") {
-                if(auto first=firstRangedCopy.find(item.id); first!=firstRangedCopy.end()) f.cooldowns[n]=f.cooldowns[first->second]+1;
-                else firstRangedCopy.emplace(item.id,n);
+                if(auto first=rangedCopies.find(item.id); first!=rangedCopies.end()) {
+                    int copyNumber=++first->second.second;
+                    f.cooldowns[n]=f.cooldowns[first->second.first]+static_cast<float>(copyNumber);
+                } else rangedCopies.emplace(item.id,std::pair<size_t,int>{n,0});
             }
         }
-        bd=b2DefaultBodyDef(); bd.type=b2_dynamicBody;
+        bd=b2DefaultBodyDef(); bd.type=f.stationary?b2_staticBody:b2_dynamicBody;
         bd.position=physics(f.position); bd.linearVelocity=physics(f.velocity); bd.isBullet=true; bd.fixedRotation=true;
         bodies[k]=b2CreateBody(world,&bd); b2Circle circle{{0,0},f.radius/40}; sd.density=1;
-        b2CreateCircleShape(bodies[k],&sd,&circle);
+        if(!f.untargetable) b2CreateCircleShape(bodies[k],&sd,&circle);
     }
-    for(int k=0;k<2;++k) if(const auto* helper=match.fighters[k].effect("minion")) {
+    for(int k=0;k<static_cast<int>(match.fighters.size());++k) if(const auto* helper=match.fighters[k].effect("minion")) {
         auto& owner=match.fighters[k]; Item weapon=owner.minionWeapon.id.empty()?fallbackMinionWeapon(match.seed,k):owner.minionWeapon;
-        Vec forward=normalized(match.fighters[1-k].position-owner.position),side{-forward.y,forward.x};
+        int target=closestEnemy(static_cast<int>(k),owner.position); if(target<0) continue;
+        Vec forward=normalized(match.fighters[target].position-owner.position),side{-forward.y,forward.x};
         float offset=(mix32(match.seed^static_cast<uint32_t>(k*419))&1u)?1.0f:-1.0f;
         Vec p=owner.position+side*offset*(owner.radius+helper->get("radius")+8);
         Minion minion;
@@ -325,11 +502,21 @@ Simulation::Simulation(const Match& m,const Rules& r):match(m),rules(r) {
     log(-1,"Fighters ready");
 }
 Simulation::~Simulation() { b2DestroyWorld(world); }
+bool Simulation::enemies(int first,int second) const {
+    return first>=0 && second>=0 && first<static_cast<int>(match.fighters.size()) && second<static_cast<int>(match.fighters.size()) && match.fighters[first].team!=match.fighters[second].team;
+}
+int Simulation::closestEnemy(int owner,Vec from) const {
+    int result=-1; float best=std::numeric_limits<float>::max();
+    for(size_t index=0;index<match.fighters.size();++index) if(enemies(owner,static_cast<int>(index)) && match.fighters[index].hp>0 && !match.fighters[index].untargetable) {
+        float distance=length(match.fighters[index].position-from); if(distance<best) { best=distance; result=static_cast<int>(index); }
+    }
+    return result;
+}
 void Simulation::log(int owner,const std::string& message,Cue cue,Vec position,float amount,bool critical) {
     events.push_back({time,owner,message,cue,position,++eventSerial,amount,critical}); if(events.size()>80) events.erase(events.begin());
 }
 bool Simulation::criticalHit(int source) {
-    if(source<0 || source>=2) return false;
+    if(source<0 || source>=static_cast<int>(match.fighters.size())) return false;
     const auto* crit=match.fighters[source].effect("crit");
     if(!crit) return false;
     uint32_t salt=static_cast<uint32_t>(criticalSerial++*0x9e3779b9ULL);
@@ -337,8 +524,9 @@ bool Simulation::criticalHit(int source) {
     return roll%10000<static_cast<uint32_t>(crit->get("chance")*10000);
 }
 void Simulation::damage(int victim,float amount,int source,const std::string& label,Cue cue,bool canCrit) {
+    if(victim<0 || victim>=static_cast<int>(match.fighters.size()) || (source>=0 && !enemies(victim,source))) return;
     auto& f=match.fighters[victim];
-    if(f.invulnerable>0 || f.hp<=0) return;
+    if(f.untargetable || f.invulnerable>0 || f.hp<=0) return;
     bool critical=canCrit && criticalHit(source);
     if(source>=0) {
         const auto& attacker=match.fighters[source]; amount*=attacker.damageMultiplier;
@@ -362,16 +550,20 @@ void Simulation::damage(int victim,float amount,int source,const std::string& la
     }
 }
 void Simulation::fire(int owner,const Item& i,size_t slot) {
-    auto& f=match.fighters[owner]; auto& fighterTarget=match.fighters[1-owner];
-    auto* minionTarget=closerEnemyMinion(minions,owner,f.position,length(fighterTarget.position-f.position));
-    Vec targetPosition=minionTarget?minionTarget->position:fighterTarget.position;
+    auto& f=match.fighters[owner]; int targetIndex=closestEnemy(owner,f.position);
+    float targetDistance=targetIndex>=0?length(match.fighters[targetIndex].position-f.position):std::numeric_limits<float>::max();
+    auto* minionTarget=closerEnemyMinion(minions,match.fighters,owner,f.position,targetDistance);
+    if(minionTarget) targetDistance=length(minionTarget->position-f.position);
+    auto* mouseTarget=closerTargetableMouse(mice,match.fighters,owner,f.position,targetDistance);
+    if(targetIndex<0 && !minionTarget && !mouseTarget) return;
+    Vec targetPosition=mouseTarget?mouseTarget->position:minionTarget?minionTarget->position:match.fighters[targetIndex].position;
     if(i.effect=="mine") {
         if(hazards.size()<300) hazards.push_back({f.position,owner,i.get("damage"),i.get("trigger_radius"),i.get("blast_radius"),i.get("lifetime"),i.get("arm_time"),0,true});
         log(owner,"MINE DEPLOYED",Cue::Mine,f.position); return;
     }
     if(i.effect=="flute") {
-        // Mice always emerge toward the opposing fighter; they are never selected as combat targets.
-        Vec forward=normalized(fighterTarget.position-f.position),back=forward*-1,side{-forward.y,forward.x};
+        // Summoned flute mice remain non-targetable; in an invasion they emerge toward the nearest hostile mouse.
+        Vec forward=normalized(targetPosition-f.position),back=forward*-1,side{-forward.y,forward.x};
         int count=static_cast<int>(i.get("count")); float radius=i.get("mouse_radius"),speed=i.get("mouse_speed");
         for(int n=0;n<count && mice.size()<120;++n) {
             float spread=(n-(count-1)*0.5f)*0.34f;
@@ -425,12 +617,39 @@ void Simulation::fire(int owner,const Item& i,size_t slot) {
 }
 void Simulation::step() {
     if(finished) return;
-    time+=Step; contactCooldown-=Step;
+    time+=Step; for(auto& cooldown:contactCooldowns) cooldown-=Step;
     for(auto& b:bursts) b.life-=Step;
     std::erase_if(bursts,[](const Burst& b){return b.life<=0;});
     for(auto& shape:fieldShapes) shape.life-=Step;
     std::erase_if(fieldShapes,[](const FieldShape& shape){return shape.life<=0;});
-    for(int k=0;k<2;++k) {
+    if(match.mouseInvasion.enabled && invasionMouseOwner>=0) {
+        invasionMouseTimer-=Step;
+        if(invasionMouseTimer<=0) {
+            invasionMouseTimer+=match.mouseInvasion.interval;
+            int active=static_cast<int>(std::ranges::count_if(mice,[](const SummonedMouse& mouse){return mouse.targetable && mouse.hp>0;}));
+            if(active<match.mouseInvasion.maxCount) {
+                float minX=match.arena.vertices.front().x,maxX=minX,minY=match.arena.vertices.front().y,maxY=minY;
+                for(Vec vertex:match.arena.vertices) { minX=std::min(minX,vertex.x); maxX=std::max(maxX,vertex.x); minY=std::min(minY,vertex.y); maxY=std::max(maxY,vertex.y); }
+                Vec spawn{}; uint32_t salt=static_cast<uint32_t>(++invasionMouseSerial);
+                for(int attempt=0;attempt<64;++attempt) {
+                    uint32_t rx=mix32(match.seed^salt*0x9e3779b9u^static_cast<uint32_t>(attempt*193));
+                    uint32_t ry=mix32(match.seed^salt*0x85ebca6bu^static_cast<uint32_t>(attempt*389));
+                    float ux=static_cast<float>(rx&0xffffu)/65535.0f,uy=static_cast<float>(ry&0xffffu)/65535.0f;
+                    Vec candidate{minX+(maxX-minX)*ux,minY+(maxY-minY)*uy};
+                    bool clear=pointInPolygon(candidate,match.arena.vertices);
+                    for(size_t edge=0;edge<match.arena.vertices.size() && clear;++edge) if(segmentDistance(candidate,match.arena.vertices[edge],match.arena.vertices[(edge+1)%match.arena.vertices.size()])<match.mouseInvasion.radius+2) clear=false;
+                    for(const auto& fighter:match.fighters) if(clear && !fighter.hidden && fighter.hp>0 && length(candidate-fighter.position)<match.mouseInvasion.radius+fighter.radius+8) clear=false;
+                    if(clear) { spawn=candidate; break; }
+                }
+                uint32_t directionRoll=mix32(match.seed^salt*0xc2b2ae35u); float angle=(static_cast<float>(directionRoll&0xffffu)/65535.0f)*2*Pi;
+                SummonedMouse mouse; mouse.position=mouse.previous=spawn; mouse.velocity={std::cos(angle)*match.mouseInvasion.speed,std::sin(angle)*match.mouseInvasion.speed};
+                mouse.owner=invasionMouseOwner; mouse.hp=match.mouseInvasion.hp; mouse.radius=match.mouseInvasion.radius; mouse.damage=match.mouseInvasion.damage;
+                mouse.biteCooldown=match.mouseInvasion.biteCooldown; mouse.speed=match.mouseInvasion.speed; mouse.targetable=true; mice.push_back(mouse);
+                bursts.push_back({spawn,0.3f,0.3f,18,invasionMouseOwner,""}); log(invasionMouseOwner,"INVASION MOUSE!",Cue::None,spawn);
+            }
+        }
+    }
+    for(int k=0;k<static_cast<int>(match.fighters.size());++k) {
         auto& f=match.fighters[k]; f.previous=f.position; f.flash=std::max(0.0f,f.flash-Step);
         f.wallCooldown-=Step; f.boostTime-=Step; f.invulnerable=std::max(0.0f,f.invulnerable-Step);
         f.comboWindow=std::max(0.0f,f.comboWindow-Step);
@@ -438,6 +657,10 @@ void Simulation::step() {
         f.slowTime=std::max(0.0f,f.slowTime-Step);
         f.wallStunWindow=std::max(0.0f,f.wallStunWindow-Step);
         f.stunTime=std::max(0.0f,f.stunTime-Step);
+        if(f.hp<=0 && !f.physicsDisabled) { b2Body_Disable(bodies[k]); f.physicsDisabled=true; }
+        if(f.stationary || f.hp<=0) {
+            f.velocity={}; b2Body_SetLinearVelocity(bodies[k],{}); continue;
+        }
         if(f.stunTime>0) {
             f.velocity=normalized(f.velocity)*(f.speed*0.1f);
             b2Body_SetLinearVelocity(bodies[k],physics(f.velocity));
@@ -460,17 +683,22 @@ void Simulation::step() {
             }
             if(i.effect=="shield" && f.cooldowns[n]<=0) { f.shield=i.get("absorb"); f.shieldTime=i.get("duration"); f.cooldowns[n]=i.get("cooldown"); log(k,"SHIELD UP",Cue::Shield,f.position); }
             if(i.effect=="dash" && f.cooldowns[n]<=0) {
-                f.velocity=normalized(match.fighters[1-k].position-f.position)*f.speed;
-                f.boostTime=i.get("duration"); f.boostMultiplier=i.get("speed_multiplier"); f.cooldowns[n]=i.get("cooldown"); log(k,"DASH!",Cue::Dash,f.position);
+                int target=closestEnemy(static_cast<int>(k),f.position);
+                if(target>=0) { f.velocity=normalized(match.fighters[target].position-f.position)*f.speed;
+                    f.boostTime=i.get("duration"); f.boostMultiplier=i.get("speed_multiplier"); f.cooldowns[n]=i.get("cooldown"); log(static_cast<int>(k),"DASH!",Cue::Dash,f.position); }
             }
             if(i.effect=="dodge" && f.cooldowns[n]<=0) {
-                for(const auto& p:projectiles) if(p.owner!=k && length(p.position-f.position)<i.get("trigger_distance") && dot(p.velocity,f.position-p.position)>0) {
+                for(const auto& p:projectiles) if(enemies(k,p.owner) && length(p.position-f.position)<i.get("trigger_distance") && dot(p.velocity,f.position-p.position)>0) {
                     Vec perpendicular=normalized(Vec{-p.velocity.y,p.velocity.x});
                     if(dot(perpendicular,f.position)>0) perpendicular=perpendicular*-1;
                     f.velocity=perpendicular*f.speed; f.boostTime=i.get("duration"); f.invulnerable=i.get("duration");
                     f.boostMultiplier=i.get("speed_multiplier"); f.cooldowns[n]=i.get("cooldown"); log(k,"DODGE!",Cue::Dodge,f.position); break;
                 }
             }
+        }
+        if(f.actorKind=="wild_dog") {
+            f.specialCooldown-=Step;
+            if(f.specialCooldown<=0) { int target=closestEnemy(static_cast<int>(k),f.position); if(target>=0) { f.velocity=normalized(match.fighters[target].position-f.position)*f.speed; f.boostTime=0.32f; f.boostMultiplier=2.7f; f.specialCooldown+=2; log(static_cast<int>(k),"WILD DOG DASH!",Cue::Dash,f.position); } }
         }
         float targetSpeed=f.speed*(f.boostTime>0?f.boostMultiplier:1)*(f.slowTime>0?f.slowMultiplier:1);
         f.velocity=f.knockbackTime>0?f.knockbackDirection*(f.speed*2.15f):normalized(f.velocity)*targetSpeed;
@@ -480,14 +708,16 @@ void Simulation::step() {
         b2Body_SetLinearVelocity(bodies[k],physics(f.velocity));
     }
     b2World_Step(world,Step,4);
-    for(int k=0;k<2;++k) {
+    for(int k=0;k<static_cast<int>(match.fighters.size());++k) {
         auto& f=match.fighters[k]; f.position=pixels(b2Body_GetPosition(bodies[k])); f.velocity=pixels(b2Body_GetLinearVelocity(bodies[k]));
+        if(f.stationary || f.hp<=0) continue;
         const auto& vertices=match.arena.vertices;
         for(size_t n=0;n<vertices.size();++n) {
             Vec a=vertices[n],b=vertices[(n+1)%vertices.size()],d=b-a;
             Vec normal=normalized(Vec{-d.y,d.x}); float distance=dot(f.position-a,normal);
             // Containment guard for high speeds / heavily edited catalogs.
             if(distance<f.radius-1) { f.position=f.position+normal*(f.radius-distance); if(dot(f.velocity,normal)<0) f.velocity=f.velocity-normal*(2*dot(f.velocity,normal)); b2Body_SetTransform(bodies[k],physics(f.position),b2Rot_identity); }
+            if(f.untargetable) continue;
             if(distance<=f.radius+1.2f && f.wallCooldown<=0) {
                 f.wallCooldown=0.18f;
                 if(f.wallStunWindow>0) {
@@ -576,15 +806,14 @@ void Simulation::step() {
                         uint32_t roll=mix32(match.seed^static_cast<uint32_t>(time/Step)^static_cast<uint32_t>(k*0x9e3779b9u+victim*193));
                         return roll%100<60;
                     };
-                    int victim=1-k;
-                    if(pointInPolygon(match.fighters[victim].position,polygon)) {
-                        if(dodgeField(victim)) log(victim,"LUCKY FIELD DODGE",Cue::Dodge,match.fighters[victim].position);
-                        else damage(victim,25,k,"DAMAGE FIELD",Cue::Hit);
+                    for(size_t victim=0;victim<match.fighters.size();++victim) if(enemies(static_cast<int>(k),static_cast<int>(victim)) && match.fighters[victim].hp>0 && !match.fighters[victim].untargetable && pointInPolygon(match.fighters[victim].position,polygon)) {
+                        if(dodgeField(static_cast<int>(victim))) log(static_cast<int>(victim),"LUCKY FIELD DODGE",Cue::Dodge,match.fighters[victim].position);
+                        else damage(static_cast<int>(victim),25,static_cast<int>(k),"DAMAGE FIELD",Cue::Hit);
                     }
-                    for(auto& minion:minions) if(minion.owner!=k && minion.hp>0 && pointInPolygon(minion.position,polygon)) {
+                    for(auto& minion:minions) if(enemies(static_cast<int>(k),minion.owner) && minion.hp>0 && pointInPolygon(minion.position,polygon)) {
                         minion.hp-=25; bursts.push_back({minion.position,0.35f,0.35f,18,k,"-25"}); log(k,"FIELD HIT MINION",Cue::Hit,minion.position);
                     }
-                    for(auto& mouse:mice) if(mouse.owner!=k && mouse.hp>0 && pointInPolygon(mouse.position,polygon)) {
+                    for(auto& mouse:mice) if(enemies(static_cast<int>(k),mouse.owner) && mouse.hp>0 && pointInPolygon(mouse.position,polygon)) {
                         mouse.hp-=25; bursts.push_back({mouse.position,0.3f,0.3f,14,k,"-25"});
                     }
                     bursts.push_back({centre,0.55f,0.55f,42,k,"FIELD!"});
@@ -608,18 +837,18 @@ void Simulation::step() {
             float duration=source?source->get("duration"):3.0f;
             float multiplier=source?source->get("slow_multiplier"):0.2f;
             Vec snaredAt{}; bool snared=false,dodged=false;
-            auto& target=match.fighters[1-tape.owner];
-            if(crossed(target.previous,target.position,target.radius)) {
-                bool careful=target.effect("careful_steps") && (mix32(match.seed^static_cast<uint32_t>(time/Step)^static_cast<uint32_t>(tape.owner*0x85ebca6bu))%100)<60;
+            for(size_t targetIndex=0;targetIndex<match.fighters.size() && !snared;++targetIndex) if(enemies(tape.owner,static_cast<int>(targetIndex))) {
+                auto& target=match.fighters[targetIndex]; if(target.hp<=0 || target.untargetable || !crossed(target.previous,target.position,target.radius)) continue;
+                bool careful=target.effect("careful_steps") && (mix32(match.seed^static_cast<uint32_t>(time/Step)^static_cast<uint32_t>(tape.owner*0x85ebca6bu+targetIndex*193))%100)<60;
                 snaredAt=target.position; snared=true; dodged=careful;
-                if(careful) log(1-tape.owner,"CAREFUL STEPS",Cue::Dodge,target.position);
+                if(careful) log(static_cast<int>(targetIndex),"CAREFUL STEPS",Cue::Dodge,target.position);
                 else { target.slowTime=std::max(target.slowTime,duration); target.slowMultiplier=std::min(target.slowMultiplier,multiplier); }
             }
-            for(auto& minion:minions) if(!snared && minion.owner!=tape.owner && minion.hp>0 && crossed(minion.previous,minion.position,minion.radius)) {
+            for(auto& minion:minions) if(!snared && enemies(tape.owner,minion.owner) && minion.hp>0 && crossed(minion.previous,minion.position,minion.radius)) {
                 minion.slowTime=std::max(minion.slowTime,duration); minion.slowMultiplier=std::min(minion.slowMultiplier,multiplier);
                 snaredAt=minion.position; snared=true;
             }
-            for(auto& mouse:mice) if(!snared && mouse.owner!=tape.owner && mouse.hp>0 && crossed(mouse.previous,mouse.position,mouse.radius)) {
+            for(auto& mouse:mice) if(!snared && enemies(tape.owner,mouse.owner) && mouse.hp>0 && crossed(mouse.previous,mouse.position,mouse.radius)) {
                 mouse.slowTime=std::max(mouse.slowTime,duration); mouse.slowMultiplier=std::min(mouse.slowMultiplier,multiplier);
                 snaredAt=mouse.position; snared=true;
             }
@@ -634,10 +863,16 @@ void Simulation::step() {
     // Pocket minions are independent small fighters with a pre-rolled weapon.
     for(auto& minion:minions) {
         if(minion.hp<=0) continue;
-        auto& fighterTarget=match.fighters[1-minion.owner];
-        auto* minionTarget=closerEnemyMinion(minions,minion.owner,minion.position,length(fighterTarget.position-minion.position));
-        Vec targetPosition=minionTarget?minionTarget->position:fighterTarget.position;
-        float targetRadius=minionTarget?minionTarget->radius:fighterTarget.radius;
+        const auto& weapon=minion.weapon;
+        int fighterTargetIndex=closestEnemy(minion.owner,minion.position);
+        Fighter* fighterTarget=fighterTargetIndex>=0?&match.fighters[fighterTargetIndex]:nullptr;
+        float targetDistance=fighterTarget?length(fighterTarget->position-minion.position):std::numeric_limits<float>::max();
+        auto* minionTarget=closerEnemyMinion(minions,match.fighters,minion.owner,minion.position,targetDistance);
+        if(minionTarget) targetDistance=length(minionTarget->position-minion.position);
+        auto* mouseTarget=closerTargetableMouse(mice,match.fighters,minion.owner,minion.position,targetDistance);
+        bool hasTarget=fighterTarget || minionTarget || mouseTarget;
+        Vec targetPosition=mouseTarget?mouseTarget->position:minionTarget?minionTarget->position:fighterTarget?fighterTarget->position:minion.position+normalized(minion.velocity)*100;
+        float targetRadius=mouseTarget?mouseTarget->radius:minionTarget?minionTarget->radius:fighterTarget?fighterTarget->radius:0;
         minion.previous=minion.position;
         minion.wallStunWindow=std::max(0.0f,minion.wallStunWindow-Step);
         minion.stunTime=std::max(0.0f,minion.stunTime-Step);
@@ -665,16 +900,16 @@ void Simulation::step() {
                 }
             }
         }
-        auto& ally=match.fighters[minion.owner];
-        if(length(minion.position-ally.position)<minion.radius+ally.radius) {
+        for(const auto& ally:match.fighters) if(ally.team==match.fighters[minion.owner].team && ally.hp>0 && length(minion.position-ally.position)<minion.radius+ally.radius) {
             Vec normal=normalized(minion.position-ally.position); minion.position=ally.position+normal*(minion.radius+ally.radius+1);
             if(dot(minion.velocity,normal)<0) minion.velocity=minion.velocity-normal*(2*dot(minion.velocity,normal));
+            break;
         }
         if(minion.stunTime>0) continue;
-        if(length(minion.position-targetPosition)<minion.radius+targetRadius) {
+        if(hasTarget && length(minion.position-targetPosition)<minion.radius+targetRadius) {
             Vec away=normalized(minion.position-targetPosition); minion.position=targetPosition+away*(minion.radius+targetRadius+1); minion.velocity=away*minion.speed;
         }
-        const auto& weapon=minion.weapon;
+        if(!hasTarget) continue;
         if(weapon.effect=="sword") {
             auto leech=[&]() {
                 float healing=weapon.get("lifesteal"); if(healing<=0 || minion.hp<=0) return;
@@ -686,7 +921,12 @@ void Simulation::step() {
             Vec direction{std::cos(minion.meleeAngle),std::sin(minion.meleeAngle)};
             Vec start=minion.position+direction*(minion.radius+3),tip=minion.position+direction*(minion.radius+weapon.get("reach"));
             if(minion.hitCooldown<=0 && segmentDistance(targetPosition,start,tip)<targetRadius+3) {
-                if(minionTarget) {
+                if(mouseTarget) {
+                    float amount=weapon.get("damage")*match.fighters[minion.owner].damageMultiplier;
+                    if(match.fighters[minion.owner].hp<match.fighters[minion.owner].maxHp*0.2f && hasItem(match.fighters[minion.owner],"stat.berserk")) amount*=2;
+                    mouseTarget->hp-=amount; bursts.push_back({mouseTarget->position,0.3f,0.3f,14,minion.owner,""}); log(minion.owner,"MINION HIT MOUSE",Cue::Sword,mouseTarget->position);
+                    leech();
+                } else if(minionTarget) {
                     float amount=weapon.get("damage")*match.fighters[minion.owner].damageMultiplier;
                     if(match.fighters[minion.owner].hp<match.fighters[minion.owner].maxHp*0.2f && hasItem(match.fighters[minion.owner],"stat.berserk")) amount*=2;
                     minionTarget->hp-=amount; bursts.push_back({minionTarget->position,0.35f,0.35f,18,minion.owner,""}); log(minion.owner,"MINION HIT",Cue::Sword,minionTarget->position);
@@ -696,8 +936,8 @@ void Simulation::step() {
                         minionTarget->knockbackTime=0.3f; minionTarget->wallStunWindow=0.3f;
                     }
                 } else {
-                    bool hit=match.fighters[1-minion.owner].hp>0 && match.fighters[1-minion.owner].invulnerable<=0;
-                    damage(1-minion.owner,weapon.get("damage"),minion.owner,"Minion "+weapon.name,Cue::Sword);
+                    bool hit=fighterTarget->hp>0 && fighterTarget->invulnerable<=0;
+                    damage(fighterTargetIndex,weapon.get("damage"),minion.owner,"Minion "+weapon.name,Cue::Sword);
                     if(hit) leech();
                 }
                 minion.hitCooldown=weapon.get("hit_cooldown");
@@ -753,7 +993,7 @@ void Simulation::step() {
     for(auto& mouse:mice) {
         if(mouse.hp<=0 || mouse.attackCooldown>0) continue;
         Minion* touchedMinion=nullptr;
-        for(auto& minion:minions) if(minion.owner!=mouse.owner && minion.hp>0 && segmentDistance(mouse.position,minion.previous,minion.position)<=mouse.radius+minion.radius) { touchedMinion=&minion; break; }
+        for(auto& minion:minions) if(enemies(mouse.owner,minion.owner) && minion.hp>0 && segmentDistance(mouse.position,minion.previous,minion.position)<=mouse.radius+minion.radius) { touchedMinion=&minion; break; }
         if(touchedMinion) {
             float amount=mouse.damage*match.fighters[mouse.owner].damageMultiplier;
             if(match.fighters[mouse.owner].hp<match.fighters[mouse.owner].maxHp*0.2f && hasItem(match.fighters[mouse.owner],"stat.berserk")) amount*=2;
@@ -761,21 +1001,26 @@ void Simulation::step() {
             bursts.push_back({touchedMinion->position,0.35f,0.35f,18,mouse.owner,""}); log(mouse.owner,"MOUSE BITES MINION",Cue::Hit,touchedMinion->position);
             continue;
         }
-        auto& target=match.fighters[1-mouse.owner];
+        int targetIndex=closestEnemy(mouse.owner,mouse.position); if(targetIndex<0) continue;
+        auto& target=match.fighters[targetIndex];
         if(segmentDistance(mouse.position,target.previous,target.position)>mouse.radius+target.radius) continue;
-        damage(1-mouse.owner,mouse.damage,mouse.owner,"Mouse bite",Cue::Hit);
+        damage(targetIndex,mouse.damage,mouse.owner,"Mouse bite",Cue::Hit);
         mouse.attackCooldown=mouse.biteCooldown;
         mouse.velocity=normalized(mouse.position-target.position)*length(mouse.velocity);
     }
     // Both body positions must be current before evaluating either fighter's melee hits.
     // A clash chooses an orbit that moves the affected blade tip away from its opponent.
     // Equal weights affect both blades; a heavier blade only deflects the lighter one.
-    for(size_t a=0;a<match.fighters[0].items.size();++a) {
-        auto& left=match.fighters[0]; const auto& leftItem=left.items[a];
-        if(leftItem.effect!="sword" || left.stunTime>0 || left.meleeClashCooldowns[a]>0) continue;
-        float leftAngle=left.meleeAngles[a]; auto leftSegment=meleeSegment(left,leftItem,leftAngle);
-        for(size_t b=0;b<match.fighters[1].items.size();++b) {
-            auto& right=match.fighters[1]; const auto& rightItem=right.items[b];
+    for(size_t leftIndex=0;leftIndex<match.fighters.size();++leftIndex) for(size_t rightIndex=leftIndex+1;rightIndex<match.fighters.size();++rightIndex) {
+        if(!enemies(static_cast<int>(leftIndex),static_cast<int>(rightIndex))) continue;
+        auto& left=match.fighters[leftIndex]; auto& right=match.fighters[rightIndex];
+        if(left.hp<=0 || right.hp<=0) continue;
+        for(size_t a=0;a<left.items.size();++a) {
+            const auto& leftItem=left.items[a];
+            if(leftItem.effect!="sword" || left.stunTime>0 || left.meleeClashCooldowns[a]>0) continue;
+            float leftAngle=left.meleeAngles[a]; auto leftSegment=meleeSegment(left,leftItem,leftAngle);
+            for(size_t b=0;b<right.items.size();++b) {
+            const auto& rightItem=right.items[b];
             if(rightItem.effect!="sword" || right.stunTime>0 || right.meleeClashCooldowns[b]>0) continue;
             float rightAngle=right.meleeAngles[b]; auto rightSegment=meleeSegment(right,rightItem,rightAngle);
             bool leftShield=leftItem.id=="weapon.orbit_shield",rightShield=rightItem.id=="weapon.orbit_shield";
@@ -802,11 +1047,12 @@ void Simulation::step() {
             if(!rightShield && (leftShield || rightWeight<=leftWeight)) right.hitCooldowns[b]=std::max(right.hitCooldowns[b],0.5f);
             left.meleeClashCooldowns[a]=0.16f; right.meleeClashCooldowns[b]=0.16f;
             Vec midpoint=(leftSegment.tip+rightSegment.tip)*0.5f;
-            bursts.push_back({midpoint,0.18f,0.18f,16,0,""});
+            bursts.push_back({midpoint,0.18f,0.18f,16,static_cast<int>(leftIndex),""});
             log(-1,"MELEE CLASH",Cue::Clash,midpoint);
         }
+        }
     }
-    for(int k=0;k<2;++k) {
+    for(int k=0;k<static_cast<int>(match.fighters.size());++k) {
         auto& f=match.fighters[k];
         for(size_t n=0;n<f.items.size();++n) {
             const auto& i=f.items[n]; if(i.effect!="sword" || i.id=="weapon.orbit_shield" || f.stunTime>0 || f.hitCooldowns[n]>0) continue;
@@ -818,8 +1064,10 @@ void Simulation::step() {
             };
             float angle=f.meleeAngles[n]; Vec dir{std::cos(angle),std::sin(angle)};
             Vec a=f.position+dir*(f.radius+5),b=f.position+dir*(f.radius+i.get("reach"));
-            auto& fighterTarget=match.fighters[1-k];
-            auto* minionTarget=closerEnemyMinion(minions,k,f.position,length(fighterTarget.position-f.position));
+            int fighterTargetIndex=closestEnemy(static_cast<int>(k),f.position);
+            Fighter* fighterTarget=fighterTargetIndex>=0?&match.fighters[fighterTargetIndex]:nullptr;
+            float targetDistance=fighterTarget?length(fighterTarget->position-f.position):std::numeric_limits<float>::max();
+            auto* minionTarget=closerEnemyMinion(minions,match.fighters,static_cast<int>(k),f.position,targetDistance);
             if(minionTarget) {
                 if(segmentDistance(minionTarget->position,a,b)<minionTarget->radius+4) {
                     float amount=i.get("damage")*f.damageMultiplier;
@@ -833,19 +1081,19 @@ void Simulation::step() {
                         log(k,"HAMMER PUSH",Cue::Hammer,minionTarget->position);
                     }
                 }
-            } else if(segmentDistance(fighterTarget.position,a,b)<fighterTarget.radius+4) {
-                bool canKnock=fighterTarget.hp>0 && fighterTarget.invulnerable<=0;
-                damage(1-k,i.get("damage"),k,i.name,i.id=="weapon.hammer"?Cue::Hammer:Cue::Sword);
+            } else if(fighterTarget && segmentDistance(fighterTarget->position,a,b)<fighterTarget->radius+4) {
+                bool canKnock=fighterTarget->hp>0 && fighterTarget->invulnerable<=0;
+                damage(fighterTargetIndex,i.get("damage"),static_cast<int>(k),i.name,i.id=="weapon.hammer"?Cue::Hammer:Cue::Sword);
                 if(canKnock) leech();
                 f.hitCooldowns[n]=i.get("hit_cooldown");
-                if(i.id=="weapon.hammer" && canKnock && fighterTarget.hp>0) {
-                    fighterTarget.knockbackDirection=normalized(fighterTarget.position-f.position);
-                    fighterTarget.knockbackTime=0.3f; fighterTarget.wallStunWindow=0.3f;
-                    log(k,"HAMMER PUSH",Cue::Hammer,fighterTarget.position);
+                if(i.id=="weapon.hammer" && canKnock && fighterTarget->hp>0) {
+                    fighterTarget->knockbackDirection=normalized(fighterTarget->position-f.position);
+                    fighterTarget->knockbackTime=0.3f; fighterTarget->wallStunWindow=0.3f;
+                    log(k,"HAMMER PUSH",Cue::Hammer,fighterTarget->position);
                 }
             }
             for(auto& mouse:mice) {
-                if(mouse.owner==k || mouse.hp<=0 || segmentDistance(mouse.position,a,b)>=mouse.radius+4) continue;
+                if(!enemies(static_cast<int>(k),mouse.owner) || mouse.hp<=0 || segmentDistance(mouse.position,a,b)>=mouse.radius+4) continue;
                 float amount=i.get("damage")*f.damageMultiplier;
                 if(f.hp<f.maxHp*0.2f && hasItem(f,"stat.berserk")) amount*=2;
                 mouse.hp-=amount; f.hitCooldowns[n]=i.get("hit_cooldown");
@@ -855,12 +1103,15 @@ void Simulation::step() {
             }
         }
     }
-    if(length(match.fighters[0].position-match.fighters[1].position)<=match.fighters[0].radius+match.fighters[1].radius+1.5f && contactCooldown<=0) {
-        float toFirst=match.fighters[1].effect("spiked_skin")?10.0f:rules.contactDamage;
-        float toSecond=match.fighters[0].effect("spiked_skin")?10.0f:rules.contactDamage;
-        damage(0,toFirst,1,match.fighters[1].effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
-        damage(1,toSecond,0,match.fighters[0].effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
-        contactCooldown=0.5f;
+    for(size_t first=0;first<match.fighters.size();++first) for(size_t second=first+1;second<match.fighters.size();++second) {
+        if(!enemies(static_cast<int>(first),static_cast<int>(second))) continue;
+        auto& a=match.fighters[first]; auto& b=match.fighters[second]; size_t contact=first*match.fighters.size()+second;
+        if(a.hp<=0 || b.hp<=0 || a.untargetable || b.untargetable || length(a.position-b.position)>a.radius+b.radius+1.5f || contactCooldowns[contact]>0) continue;
+        float toFirst=b.harmless?0:b.contactDamage>=0?b.contactDamage:b.effect("spiked_skin")?10.0f:rules.contactDamage;
+        float toSecond=a.harmless?0:a.contactDamage>=0?a.contactDamage:a.effect("spiked_skin")?10.0f:rules.contactDamage;
+        if(toFirst>0) damage(static_cast<int>(first),toFirst,static_cast<int>(second),b.actorKind=="wild_dog"?"Wild Dog collision":b.effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
+        if(toSecond>0) damage(static_cast<int>(second),toSecond,static_cast<int>(first),a.actorKind=="wild_dog"?"Wild Dog collision":a.effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
+        contactCooldowns[contact]=0.5f;
     }
     for(size_t projectileIndex=0;projectileIndex<projectiles.size();++projectileIndex) {
         auto& p=projectiles[projectileIndex];
@@ -873,8 +1124,8 @@ void Simulation::step() {
         }
         p.position=p.position+p.velocity*Step; p.life-=Step;
         bool deflected=false;
-        for(int defender=0;defender<2 && !deflected;++defender) {
-            if(defender==p.owner) continue;
+        for(size_t defender=0;defender<match.fighters.size() && !deflected;++defender) {
+            if(!enemies(p.owner,static_cast<int>(defender)) || match.fighters[defender].hp<=0 || match.fighters[defender].untargetable) continue;
             auto& fighter=match.fighters[defender];
             for(size_t weapon=0;weapon<fighter.items.size();++weapon) {
                 const auto& item=fighter.items[weapon];
@@ -888,14 +1139,14 @@ void Simulation::step() {
                 if(shield) {
                     Vec front=normalized(((segment.base+segment.tip)*0.5f)-fighter.position);
                     p.velocity=p.velocity-front*(2*dot(p.velocity,front));
-                } else p.velocity=normalized(match.fighters[1-defender].position-fighter.position)*speed;
-                p.owner=defender;
+                } else { int target=closestEnemy(static_cast<int>(defender),fighter.position); if(target>=0) p.velocity=normalized(match.fighters[target].position-fighter.position)*speed; }
+                p.owner=static_cast<int>(defender);
                 if(bouncy) {
                     // It keeps its physically reflected heading; only its team colour and one-hit return target change.
                     p.bouncyDeflected=true; p.bouncyReturnTarget=previousOwner;
                 }
                 p.position=p.position+normalized(p.velocity)*(p.radius+5); p.previous=p.position;
-                bursts.push_back({p.position,0.18f,0.18f,14,defender,""});
+                bursts.push_back({p.position,0.18f,0.18f,14,static_cast<int>(defender),""});
                 log(defender,shield?"SHIELD DEFLECT":"KATANA DEFLECT",Cue::Clash,p.position);
                 deflected=true; break;
             }
@@ -938,7 +1189,7 @@ void Simulation::step() {
         int hitMouse=-1;
         for(size_t mouseIndex=0;mouseIndex<mice.size();++mouseIndex) {
             const auto& mouse=mice[mouseIndex];
-            if(mouse.owner==p.owner || mouse.hp<=0) continue;
+            if(!enemies(p.owner,mouse.owner) || mouse.hp<=0) continue;
             if(segmentDistance(mouse.position,p.previous,p.position)<=mouse.radius+p.radius) { hitMouse=static_cast<int>(mouseIndex); break; }
         }
         if(hitMouse>=0) {
@@ -952,7 +1203,7 @@ void Simulation::step() {
         int hitMinion=-1;
         for(size_t minionIndex=0;minionIndex<minions.size();++minionIndex) {
             const auto& minion=minions[minionIndex];
-            if(minion.owner==p.owner || minion.hp<=0) continue;
+            if(!enemies(p.owner,minion.owner) || minion.hp<=0) continue;
             if(segmentDistance(minion.position,p.previous,p.position)<=minion.radius+p.radius) { hitMinion=static_cast<int>(minionIndex); break; }
         }
         if(hitMinion>=0) {
@@ -963,13 +1214,18 @@ void Simulation::step() {
             if(bouncy) bounceBouncy(minion.position,minion.radius); else if(boomerang && !p.boomerangHit) bounceBoomerang(minion.position,minion.radius); else p.life=0;
             continue;
         }
-        auto& target=match.fighters[1-p.owner];
-        // Sweep in the moving target's frame, so even fast bullets cannot skip a ball.
-        Vec a=p.previous-target.previous,b=p.position-target.position;
-        float hitFraction=2; float radius=target.radius+p.radius;
-        Vec delta=b-a; float aa=dot(delta,delta),bb=2*dot(a,delta),cc=dot(a,a)-radius*radius;
-        if(cc<=0) hitFraction=0;
-        else if(aa>0.00001f) { float disc=bb*bb-4*aa*cc; if(disc>=0) { float t=(-bb-std::sqrt(disc))/(2*aa); if(t>=0 && t<=1) hitFraction=t; } }
+        int targetIndex=-1; float hitFraction=2;
+        for(size_t candidate=0;candidate<match.fighters.size();++candidate) {
+            auto& candidateTarget=match.fighters[candidate];
+            if(!enemies(p.owner,static_cast<int>(candidate)) || candidateTarget.hp<=0 || candidateTarget.untargetable || (bouncy && p.bouncyDeflected && p.bouncyReturnTarget!=static_cast<int>(candidate))) continue;
+            // Sweep in the moving target's frame, so even fast bullets cannot skip a ball.
+            Vec a=p.previous-candidateTarget.previous,b=p.position-candidateTarget.position,delta=b-a;
+            float radius=candidateTarget.radius+p.radius,fraction=2;
+            float aa=dot(delta,delta),bb=2*dot(a,delta),cc=dot(a,a)-radius*radius;
+            if(cc<=0) fraction=0;
+            else if(aa>0.00001f) { float disc=bb*bb-4*aa*cc; if(disc>=0) { float t=(-bb-std::sqrt(disc))/(2*aa); if(t>=0 && t<=1) fraction=t; } }
+            if(fraction<hitFraction) { hitFraction=fraction; targetIndex=static_cast<int>(candidate); }
+        }
         float wallFraction=2; Vec wallNormal{};
         const auto& vertices=match.arena.vertices;
         for(size_t n=0;n<vertices.size();++n) {
@@ -978,27 +1234,30 @@ void Simulation::step() {
             if(oldDistance<=0 && wallFraction>0) { wallFraction=0; wallNormal=normal; }
             else if(newDistance<=0) { float fraction=oldDistance/(oldDistance-newDistance); if(fraction<wallFraction) { wallFraction=fraction; wallNormal=normal; } }
         }
-        if(hitFraction<=1 && hitFraction<=wallFraction) {
+        if(targetIndex>=0 && hitFraction<=1 && hitFraction<=wallFraction) {
+            auto& target=match.fighters[targetIndex];
             std::string label=p.kind=="bow"?"Arrow":p.kind=="pistol"?"Heavy round":p.kind=="poison_dart"?"Poison dart":p.kind=="shuriken"?"Shuriken":bouncy?"Bouncy Ball":boomerang?"Boomerang":"Pellet";
             int dodgeChance=bouncy?60:10;
             bool lucky=target.effect("careful_steps") && (mix32(match.seed^static_cast<uint32_t>(time/Step)^static_cast<uint32_t>(p.owner*193+projectileIndex*31))%100)<static_cast<uint32_t>(dodgeChance);
             if(lucky) {
-                log(1-p.owner,"LUCKY DODGE!",Cue::Dodge,target.position);
+                log(targetIndex,"LUCKY DODGE!",Cue::Dodge,target.position);
             } else if(p.kind=="poison_dart" && target.hp>0 && target.invulnerable<=0) {
                 // Poison darts deliberately ignore weapon damage multipliers: their hit is always exactly 1 HP.
                 target.hp=std::max(0.0f,target.hp-1); target.flash=0.15f;
-                bursts.push_back({target.position,0.65f,0.65f,24,1-p.owner,"-1"});
+                match.fighters[p.owner].damageDealt+=1;
+                bursts.push_back({target.position,0.65f,0.65f,24,targetIndex,"-1"});
                 log(p.owner,label+" · 1 damage",Cue::Hit,target.position,1);
                 if(target.poisonDps<=0) target.poisonTick=1;
                 target.poisonDps=std::min(12.0f,target.poisonDps+1);
+                target.poisonOwner=p.owner;
                 log(p.owner,"POISONED",Cue::Hit,target.position);
             } else if(!boomerang || !p.boomerangHit) {
-                damage(1-p.owner,p.damage,p.owner,label);
-                if(p.kind=="shuriken" && p.sourceOwner>=0 && p.sourceOwner<2 && p.weaponSlot>=0 && p.weaponSlot<static_cast<int>(match.fighters[p.sourceOwner].cooldowns.size())) {
+                damage(targetIndex,p.damage,p.owner,label);
+                if(p.kind=="shuriken" && p.sourceOwner>=0 && p.sourceOwner<static_cast<int>(match.fighters.size()) && p.weaponSlot>=0 && p.weaponSlot<static_cast<int>(match.fighters[p.sourceOwner].cooldowns.size())) {
                     match.fighters[p.sourceOwner].cooldowns[p.weaponSlot]=std::max(0.0f,match.fighters[p.sourceOwner].cooldowns[p.weaponSlot]-1);
                 }
             }
-            if(bouncy && p.bouncyDeflected && p.bouncyReturnTarget==1-p.owner) {
+            if(bouncy && p.bouncyDeflected && p.bouncyReturnTarget==targetIndex) {
                 // A deflected ball may only hurt its former holder once, when it naturally reaches them.
                 p.life=0;
             } else if(bouncy) bounceBouncy(target.position,target.radius);
@@ -1025,28 +1284,30 @@ void Simulation::step() {
     for(auto& h:hazards) {
         h.life-=Step; h.arm-=Step; h.hitCooldown-=Step;
         if(h.life<=0 || h.arm>0 || h.hitCooldown>0) continue;
-        const auto& target=match.fighters[1-h.owner];
         if(h.mine) {
             auto touchesTrigger=[&](Vec previous,Vec position,float radius) { return segmentDistance(h.position,previous,position)<=h.radius+radius; };
-            bool triggered=touchesTrigger(target.previous,target.position,target.radius);
-            for(const auto& minion:minions) if(minion.owner!=h.owner && minion.hp>0 && touchesTrigger(minion.previous,minion.position,minion.radius)) triggered=true;
-            for(const auto& mouse:mice) if(mouse.owner!=h.owner && mouse.hp>0 && touchesTrigger(mouse.previous,mouse.position,mouse.radius)) triggered=true;
+            bool triggered=false;
+            for(size_t target=0;target<match.fighters.size();++target) if(enemies(h.owner,static_cast<int>(target)) && match.fighters[target].hp>0 && !match.fighters[target].untargetable && touchesTrigger(match.fighters[target].previous,match.fighters[target].position,match.fighters[target].radius)) triggered=true;
+            for(const auto& minion:minions) if(enemies(h.owner,minion.owner) && minion.hp>0 && touchesTrigger(minion.previous,minion.position,minion.radius)) triggered=true;
+            for(const auto& mouse:mice) if(enemies(h.owner,mouse.owner) && mouse.hp>0 && touchesTrigger(mouse.previous,mouse.position,mouse.radius)) triggered=true;
             if(!triggered) continue;
-            bool careful=target.effect("careful_steps") && (mix32(match.seed^static_cast<uint32_t>(time/Step)^static_cast<uint32_t>(h.owner*97))%100)<60;
-            if(length(target.position-h.position)<=h.blastRadius+target.radius) {
-                if(careful) log(1-h.owner,"CAREFUL STEPS",Cue::Dodge,target.position);
-                else damage(1-h.owner,h.damage,h.owner,"Mine explosion");
+            for(size_t targetIndex=0;targetIndex<match.fighters.size();++targetIndex) if(enemies(h.owner,static_cast<int>(targetIndex))) {
+                auto& target=match.fighters[targetIndex]; if(target.hp<=0 || target.untargetable || length(target.position-h.position)>h.blastRadius+target.radius) continue;
+                bool careful=target.effect("careful_steps") && (mix32(match.seed^static_cast<uint32_t>(time/Step)^static_cast<uint32_t>(h.owner*97+targetIndex*193))%100)<60;
+                if(careful) log(static_cast<int>(targetIndex),"CAREFUL STEPS",Cue::Dodge,target.position);
+                else damage(static_cast<int>(targetIndex),h.damage,h.owner,"Mine explosion");
             }
-            for(auto& minion:minions) if(minion.owner!=h.owner && minion.hp>0 && length(minion.position-h.position)<=h.blastRadius+minion.radius) {
+            for(auto& minion:minions) if(enemies(h.owner,minion.owner) && minion.hp>0 && length(minion.position-h.position)<=h.blastRadius+minion.radius) {
                 minion.hp-=h.damage; bursts.push_back({minion.position,0.35f,0.35f,18,h.owner,""});
             }
-            for(auto& mouse:mice) if(mouse.owner!=h.owner && mouse.hp>0 && length(mouse.position-h.position)<=h.blastRadius+mouse.radius) mouse.hp-=h.damage;
+            for(auto& mouse:mice) if(enemies(h.owner,mouse.owner) && mouse.hp>0 && length(mouse.position-h.position)<=h.blastRadius+mouse.radius) mouse.hp-=h.damage;
             log(h.owner,"BOOM!",Cue::Explosion,h.position);
             bursts.push_back({h.position,0.45f,0.45f,h.blastRadius,h.owner,""}); h.life=0;
-        } else if(segmentDistance(h.position,target.previous,target.position)<=h.radius+target.radius) {
+        } else for(size_t targetIndex=0;targetIndex<match.fighters.size();++targetIndex) if(enemies(h.owner,static_cast<int>(targetIndex))) {
+                auto& target=match.fighters[targetIndex]; if(target.hp<=0 || target.untargetable || segmentDistance(h.position,target.previous,target.position)>h.radius+target.radius) continue;
                 bool careful=target.effect("careful_steps") && (mix32(match.seed^static_cast<uint32_t>(time/Step)^static_cast<uint32_t>(h.owner*97))%100)<60;
-                if(careful) log(1-h.owner,"CAREFUL STEPS",Cue::Dodge,target.position);
-                else damage(1-h.owner,h.damage,h.owner,"Wall spike");
+                if(careful) log(static_cast<int>(targetIndex),"CAREFUL STEPS",Cue::Dodge,target.position);
+                else damage(static_cast<int>(targetIndex),h.damage,h.owner,"Wall spike");
                 const auto* item=match.fighters[h.owner].effect("spikes"); h.hitCooldown=item?item->get("hit_cooldown"):0.8f;
         }
     }
@@ -1054,29 +1315,43 @@ void Simulation::step() {
     std::erase_if(mice,[](const SummonedMouse& mouse){ return mouse.hp<=0; });
     std::erase_if(minions,[](const Minion& minion){ return minion.hp<=0; });
     // Poison lasts for the round and damages in visible one-second ticks.
-    for(int k=0;k<2;++k) {
+    for(int k=0;k<static_cast<int>(match.fighters.size());++k) {
         auto& f=match.fighters[k]; if(f.poisonDps<=0 || f.hp<=0) continue;
         f.poisonTick-=Step;
         if(f.poisonTick<=0) {
-            int source=1-k; bool critical=criticalHit(source);
+            int source=f.poisonOwner; bool critical=criticalHit(source);
             float amount=std::min(f.hp,f.poisonDps*(critical?2:1)); f.hp-=amount; f.flash=0.1f; f.poisonTick+=1;
-            bursts.push_back({f.position,0.45f,0.45f,20,0,""});
+            if(source>=0 && source<static_cast<int>(match.fighters.size())) match.fighters[source].damageDealt+=amount;
+            bursts.push_back({f.position,0.45f,0.45f,20,static_cast<int>(k),""});
             log(source,critical?"POISON CRIT":"POISON",Cue::Hit,f.position,amount,critical);
         }
     }
     if(rules.suddenDps>0 && time>=rules.sudden) {
         if(time-Step<rules.sudden) log(-1,"OVERTIME · both fighters are losing health",Cue::Overtime);
         float loss=rules.suddenDps*Step;
-        for(auto& f:match.fighters) f.hp=std::max(0.0f,f.hp-loss);
+        for(auto& f:match.fighters) if(!f.untargetable) f.hp=std::max(0.0f,f.hp-loss);
     }
     checkEnd();
 }
 void Simulation::checkEnd() {
-    bool dead0=match.fighters[0].hp<=0,dead1=match.fighters[1].hp<=0;
-    if(dead0 || dead1) winner=dead0&&dead1?-1:dead0?1:0;
-    else if(time>=rules.limit) winner=-1;
-    else return;
-    finished=true; log(winner,winner<0?"DRAW · stake refunded":match.fighters[winner].name+" wins!");
+    if(match.challenge && match.objectiveType=="survive") {
+        bool alive=std::ranges::any_of(match.fighters,[](const Fighter& fighter){ return fighter.team==0 && fighter.hp>0; });
+        if(!alive) winner=1;
+        else if(time>=rules.limit) winner=0;
+        else return;
+    } else if(match.challenge && match.objectiveType=="deal_damage") {
+        float dealt=0; for(const auto& fighter:match.fighters) if(fighter.team==0) dealt+=fighter.damageDealt;
+        if(dealt>=match.objectiveTarget) winner=0;
+        else if(time>=rules.limit || std::ranges::none_of(match.fighters,[](const Fighter& fighter){ return fighter.team==0 && fighter.hp>0; })) winner=1;
+        else return;
+    } else {
+        bool alive0=std::ranges::any_of(match.fighters,[](const Fighter& fighter){ return fighter.team==0 && fighter.hp>0; });
+        bool alive1=std::ranges::any_of(match.fighters,[](const Fighter& fighter){ return fighter.team==1 && fighter.hp>0; });
+        if(!alive0 || !alive1) winner=!alive0&&!alive1?-1:alive0?0:1;
+        else if(time>=rules.limit) winner=match.challenge?1:-1;
+        else return;
+    }
+    finished=true; log(winner,winner<0?"DRAW":winner==0&&match.challenge?"CHALLENGE COMPLETE":"TEAM "+std::to_string(winner+1)+" WINS");
 }
 bool Wallet::place(int side,int amount) {
     if(active || side<0 || side>1 || amount<1 || amount>coins) return false;
@@ -1112,12 +1387,24 @@ bool Wallet::removeOwnedBall(size_t index) {
     if(index>=ownedBallSeeds.size()) return false;
     ownedBallSeeds.erase(ownedBallSeeds.begin()+static_cast<std::ptrdiff_t>(index)); return true;
 }
+bool Wallet::challengeUnlocked(const std::string& id) const { return std::find(unlockedChallenges.begin(),unlockedChallenges.end(),id)!=unlockedChallenges.end(); }
+bool Wallet::challengeCompleted(const std::string& id) const { return std::find(completedChallenges.begin(),completedChallenges.end(),id)!=completedChallenges.end(); }
+bool Wallet::unlockChallenge(const ChallengeDefinition& challenge) {
+    if(challengeUnlocked(challenge.id) || coins<challenge.unlockCost) return false;
+    if(std::ranges::any_of(challenge.prerequisites,[&](const std::string& id){return !challengeCompleted(id);})) return false;
+    coins-=challenge.unlockCost; unlockedChallenges.push_back(challenge.id); return true;
+}
+bool Wallet::completeChallenge(const std::string& id) {
+    if(!challengeUnlocked(id) || challengeCompleted(id)) return false;
+    completedChallenges.push_back(id); return true;
+}
 void Wallet::resetSeason(int initialCoins) {
     wins=losses=draws=rounds=0; active=false; stake=0; selection=-1; coins=initialCoins;
 }
 void Wallet::save(const std::filesystem::path& path) const {
     json j={{"version",1},{"coins",coins},{"wins",wins},{"losses",losses},{"draws",draws},{"rounds",rounds},{"active",active},{"stake",stake},{"selection",selection},
-        {"collection_slots",collectionSlots},{"owned_ball_seeds",ownedBallSeeds},{"market_ball_seeds",marketBallSeeds},{"market_initialized",marketInitialized}};
+        {"collection_slots",collectionSlots},{"owned_ball_seeds",ownedBallSeeds},{"market_ball_seeds",marketBallSeeds},{"market_initialized",marketInitialized},
+        {"unlocked_challenges",unlockedChallenges},{"completed_challenges",completedChallenges}};
     auto temporary=path; temporary+=".tmp";
     { std::ofstream s(temporary); require(s.good(),"Cannot save the wallet."); s<<j.dump(2); s.flush(); require(s.good(),"Wallet save failed."); }
     auto backup=path; backup+=".bak";
@@ -1140,8 +1427,12 @@ Wallet Wallet::load(const std::filesystem::path& path,int initial) {
         std::copy(seeds.begin(),seeds.end(),w.marketBallSeeds.begin());
     }
     w.marketInitialized=j.value("market_initialized",j.contains("market_ball_seeds"));
+    w.unlockedChallenges=j.value("unlocked_challenges",std::vector<std::string>{}); w.completedChallenges=j.value("completed_challenges",std::vector<std::string>{});
     require(w.collectionSlots>=0 && w.collectionSlots<=12 && w.ownedBallSeeds.size()<=static_cast<size_t>(w.collectionSlots),"Invalid collection save.");
     require(std::ranges::none_of(w.ownedBallSeeds,[](uint32_t seed){return seed==0;}),"Invalid owned ball seed.");
+    auto validProgress=[](const std::vector<std::string>& values) { std::set<std::string> unique; for(const auto& value:values) if(value.empty() || value.size()>80 || !unique.insert(value).second) return false; return values.size()<=512; };
+    require(validProgress(w.unlockedChallenges) && validProgress(w.completedChallenges),"Invalid challenge progress save.");
+    require(std::ranges::all_of(w.completedChallenges,[&](const std::string& id){return w.challengeUnlocked(id);}),"Completed challenge is not unlocked.");
     // A committed bet stays spent if the application is closed during a fight.
     if(j.at("active").get<bool>()) { ++w.losses; ++w.rounds; }
     return w;
