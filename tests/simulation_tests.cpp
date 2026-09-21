@@ -601,7 +601,11 @@ int main(int argc,char** argv) {
         }
         {
             Match m=fixture(c); m.arena.effect="center_gravity"; m.fighters[0].position={100,100}; m.fighters[0].previous=m.fighters[0].position; m.fighters[0].speed=120; m.fighters[0].velocity={0,120};
-            Simulation s(m,c.rules); for(int n=0;n<30;++n) s.step(); check(s.match.fighters[0].velocity.x<-1,"Center gravity did not gradually curve a travelling ball toward the arena centre");
+            Simulation s(m,c.rules); for(int n=0;n<30;++n) s.step(); check(s.match.fighters[0].velocity.x<-9.0f,"Center gravity did not noticeably curve a travelling ball toward the arena centre");
+        }
+        {
+            Match m=fixture(c); m.arena.effect="center_gravity"; m.fighters[0].position={-270,0}; m.fighters[0].previous=m.fighters[0].position; m.fighters[0].speed=120; m.fighters[0].velocity={-120,0};
+            Simulation s(m,c.rules); for(int n=0;n<8;++n) s.step(); check(s.match.fighters[0].velocity.x>100,"Stronger center gravity prevented a normal wall rebound");
         }
         {
             Match m=fixture(c); equip(m.fighters[0],damageField); m.fighters[0].position={0,-60}; m.fighters[0].previous=m.fighters[0].position; m.fighters[1].position={40,0}; m.fighters[1].previous=m.fighters[1].position;

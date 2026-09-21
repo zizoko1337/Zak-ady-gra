@@ -9,6 +9,7 @@
 
 namespace orbital {
 using nlohmann::json;
+static constexpr float CenterGravityTurnDegreesPerSecond=24.0f;
 float dot(Vec a,Vec b) { return a.x*b.x+a.y*b.y; }
 float length(Vec a) { return std::sqrt(dot(a,a)); }
 int payoutFor(int stake,float multiplier) {
@@ -702,9 +703,8 @@ void Simulation::step() {
         }
         float targetSpeed=f.speed*(f.boostTime>0?f.boostMultiplier:1)*(f.slowTime>0?f.slowMultiplier:1);
         f.velocity=f.knockbackTime>0?f.knockbackDirection*(f.speed*2.15f):normalized(f.velocity)*targetSpeed;
-        // A weak, continuous pull curves travelling balls over several seconds.  It is far
-        // too small to replace normal wall bounces, which still use Box2D restitution.
-        if(match.arena.effect=="center_gravity") f.velocity=turnToward(f.velocity,Vec{}-f.position,4.0f*Step);
+        // Gradually curve the flight toward the centre while retaining normal wall bounces.
+        if(match.arena.effect=="center_gravity") f.velocity=turnToward(f.velocity,Vec{}-f.position,CenterGravityTurnDegreesPerSecond*Step);
         b2Body_SetLinearVelocity(bodies[k],physics(f.velocity));
     }
     b2World_Step(world,Step,4);
@@ -885,7 +885,7 @@ void Simulation::step() {
             else minion.velocity=normalized(minion.velocity)*(minion.speed*moveMultiplier);
             minion.cooldown-=Step; minion.hitCooldown-=Step;
         }
-        if(match.arena.effect=="center_gravity") minion.velocity=turnToward(minion.velocity,Vec{}-minion.position,4.0f*Step);
+        if(match.arena.effect=="center_gravity") minion.velocity=turnToward(minion.velocity,Vec{}-minion.position,CenterGravityTurnDegreesPerSecond*Step);
         minion.position=minion.position+minion.velocity*Step;
         for(size_t n=0;n<match.arena.vertices.size();++n) {
             Vec a=match.arena.vertices[n],b=match.arena.vertices[(n+1)%match.arena.vertices.size()];
@@ -967,7 +967,7 @@ void Simulation::step() {
     for(auto& mouse:mice) {
         mouse.previous=mouse.position; mouse.slowTime=std::max(0.0f,mouse.slowTime-Step);
         mouse.velocity=normalized(mouse.velocity)*(mouse.speed*(mouse.slowTime>0?mouse.slowMultiplier:1));
-        if(match.arena.effect=="center_gravity") mouse.velocity=turnToward(mouse.velocity,Vec{}-mouse.position,4.0f*Step);
+        if(match.arena.effect=="center_gravity") mouse.velocity=turnToward(mouse.velocity,Vec{}-mouse.position,CenterGravityTurnDegreesPerSecond*Step);
         mouse.position=mouse.position+mouse.velocity*Step;
         mouse.attackCooldown-=Step;
         for(size_t n=0;n<match.arena.vertices.size();++n) {

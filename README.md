@@ -16,7 +16,7 @@ Interfejs, wyposażenie, zasady i komunikaty gry są teraz w języku angielskim.
 
 ## Uruchomienie
 
-Kliknij **`Uruchom.bat`**. Skrypt wybiera najnowszą sprawdzoną kompilację (obecnie `build-r70/OrbitalOdds.exe`). Pliki z folderu `data/` muszą pozostać w folderze projektu. Do grania nie jest potrzebny internet.
+Kliknij **`Uruchom.bat`**. Skrypt wybiera najnowszą sprawdzoną kompilację (obecnie `build-r72/OrbitalOdds.exe`). Pliki z folderu `data/` muszą pozostać w folderze projektu. Do grania nie jest potrzebny internet.
 
 Startujesz z 1000 monet. Wybierz zawodnika, ustaw stawkę i kliknij **Place Bet & Fight**. Wypłata przy kursie 1,90 wynosi 190 monet za zakład 100 monet, czyli 90 monet zysku. Kurs jest stały, a nie obliczany z prawdopodobieństwa wygranej. Remis zwraca stawkę.
 
@@ -132,7 +132,7 @@ ctest --test-dir build -C Release --output-on-failure
 
 CMake korzysta z bibliotek w `vendor/`; jeśli ich nie ma, pobiera przypięte wersje z oficjalnych repozytoriów. Wymagane są biblioteki systemowe potrzebne raylib dla danego systemu. Interfejs używa systemowej czcionki Segoe UI na Windows, DejaVu Sans na Linux lub Arial na macOS; bez nich działa czcionka zastępcza z ograniczonym zestawem znaków.
 
-`build-r70/OrbitalOdds.exe --smoke` renderuje ekrany kontrolne do `build/smoke/`, w tym kolekcję i jej popover statystyk, inspekcję kulki, mapę wyzwań, popovery składu i bossa, inspektor przeciwnika oraz pełny przebieg challenge od odliczania do wyniku. Używa odrębnego portfela testowego. Sprawdza zatrzymanie fizyki podczas odliczania, pauzę, czas odliczania przy 16×, pojedyncze rozliczenie zakładu i odtwarzanie dźwięku przez backend (z wyciszonym wyjściem). Zestaw testów bez okna obejmuje dodatkowo dane pięciu ścieżek, walkę 2v2, Wild Doga, oba DPS Checki, Mouse Invasion wraz z atakami dystansowymi i białymi, pojedynek 85 pkt, Twinblade Titana oraz Ricochet Behemotha.
+`build-r72/OrbitalOdds.exe --smoke` renderuje ekrany kontrolne do `build/smoke/`, w tym kolekcję i jej popover statystyk, inspekcję kulki, mapę wyzwań, popovery składu i bossa, inspektor przeciwnika oraz pełny przebieg challenge od odliczania do wyniku. Używa odrębnego portfela testowego. Sprawdza zatrzymanie fizyki podczas odliczania, pauzę, czas odliczania przy 16×, pojedyncze rozliczenie zakładu i odtwarzanie dźwięku przez backend (z wyciszonym wyjściem). Zestaw testów bez okna obejmuje dodatkowo dane pięciu ścieżek, walkę 2v2, Wild Doga, oba DPS Checki, Mouse Invasion wraz z atakami dystansowymi i białymi, pojedynek 85 pkt, Twinblade Titana, Ricochet Behemotha oraz wzmocnione przyciąganie Center Gravity z zachowaniem odbić od ścian.
 
 ## Pliki projektu
 

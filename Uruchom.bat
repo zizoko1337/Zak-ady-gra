@@ -1,5 +1,13 @@
 @echo off
 cd /d "%~dp0"
+if exist "build-r72\OrbitalOdds.exe" (
+    start "" "build-r72\OrbitalOdds.exe"
+    exit /b
+)
+if exist "build-r71\OrbitalOdds.exe" (
+    start "" "build-r71\OrbitalOdds.exe"
+    exit /b
+)
 if exist "build-r70\OrbitalOdds.exe" (
     start "" "build-r70\OrbitalOdds.exe"
     exit /b

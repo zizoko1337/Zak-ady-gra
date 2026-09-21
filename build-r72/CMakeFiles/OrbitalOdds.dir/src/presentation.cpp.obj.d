@@ -1,0 +1,121 @@
+CMakeFiles/OrbitalOdds.dir/src/presentation.cpp.obj: \
+ C:\Users\STACJO~1\Desktop\ZAKADY~1\src\presentation.cpp \
+ C:\Users\STACJO~1\Desktop\ZAKADY~1\src\presentation.hpp \
+ C:\Users\STACJO~1\Desktop\ZAKADY~1\src\feedback.hpp \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/algorithm \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_algobase.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/x86_64-w64-mingw32/bits/c++config.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/x86_64-w64-mingw32/bits/os_defines.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/x86_64-w64-mingw32/bits/cpu_defines.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/pstl/pstl_config.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/cpp_type_traits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/version.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/type_traits \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/ext/type_traits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/ext/numeric_traits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_pair.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/move.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/utility.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/compare \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/concepts \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_iterator_base_types.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/iterator_concepts.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/ptr_traits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/ranges_cmp.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_iterator_base_funcs.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/concept_check.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/debug/assertions.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_iterator.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/new \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/exception.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/new_except.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/exception_defines.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_construct.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/debug/debug.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/predefined_ops.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_function.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/backward/binders.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bit \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_algo.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/algorithmfwd.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/initializer_list \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_heap.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/uniform_int_dist.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_tempbuf.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/cstdlib \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/stdlib.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/corecrt.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/_mingw.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/_mingw_mac.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/_mingw_secapi.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/vadefs.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/corecrt_wstdlib.h \
+ C:/Users/STACJO~1/Desktop/ZAKADY~1/tools/mingw64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/limits.h \
+ C:/Users/STACJO~1/Desktop/ZAKADY~1/tools/mingw64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/syslimits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/limits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/crtdefs.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/sec_api/stdlib_s.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/stdlib.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/malloc.h \
+ C:/Users/STACJO~1/Desktop/ZAKADY~1/tools/mingw64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/mm_malloc.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/errno.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/std_abs.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/ranges_algo.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/ranges_algobase.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/ranges_base.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/max_size_type.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/numbers \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/limits \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/invoke.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/ranges_util.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/pstl/glue_algorithm_defs.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/pstl/execution_defs.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/array \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stdexcept_throw.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stdexcept_throwfwd.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/range_access.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/cmath \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/requires_hosted.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/math.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/specfun.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/gamma.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/special_function_util.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/bessel_function.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/beta_function.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/ell_integral.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/exp_integral.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/hypergeometric.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/legendre_function.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/modified_bessel_func.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/poly_hermite.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/poly_laguerre.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/riemann_zeta.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/cstdint \
+ C:/Users/STACJO~1/Desktop/ZAKADY~1/tools/mingw64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stdint.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/stdint.h \
+ C:/Users/STACJO~1/Desktop/ZAKADY~1/tools/mingw64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stddef.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/stddef.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/vector \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/allocator.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/x86_64-w64-mingw32/bits/c++allocator.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/new_allocator.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/new_throw.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/memoryfwd.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_uninitialized.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/ext/alloc_traits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/alloc_traits.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_vector.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_bvector.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/functional_hash.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/hash_bytes.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/erase_if.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/vector.tcc \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/memory_resource.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/cstddef \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/uses_allocator.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/uses_allocator_args.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tuple \
+ C:/Users/STACJO~1/Desktop/ZAKADY~1/vendor/raylib-5.5/src/raylib.h \
+ C:/Users/STACJO~1/Desktop/ZAKADY~1/tools/mingw64/lib/gcc/x86_64-w64-mingw32/16.2.0/include/stdarg.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/stdarg.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/_mingw_stdarg.h
