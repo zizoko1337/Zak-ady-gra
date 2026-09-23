@@ -1,0 +1,11 @@
+# Hashes of file build rules.
+cbf83f50186e5c347b6b413ab75feee4 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-build
+60c1f0fb6e2fbfe4e95abb3bcf8400ba C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-configure
+b8a4c517e5dbc6ca52eeb1cb85c41368 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-download
+69caee5a2da98867bf3d5f4d2a31d4b6 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-install
+68a11b55ab9847cf189778101eb1fe3d C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-mkdir
+ae710137e85364793aeced3bc668b431 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-patch
+e25bb702c510ee661b4cec7169175871 C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-test
+8b78157572c984df9c7037b1a8031d1f C:/Users/Stacjonarka/Desktop/ZAKADY~1/build-r74/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-update
+293edfa7245cbdc6265bb7d9d031e8f9 CMakeFiles/raylib-populate
+22cb71547a750a3741c4df5df0fef70f CMakeFiles/raylib-populate-complete

@@ -144,8 +144,16 @@ int main(int argc,char** argv) {
         }
         check(collection.nextCollectionSlotCost()==0 && !collection.unlockCollectionSlot(),"Collection exceeded 12 slots");
         collection.marketBallSeeds={101,202,303}; collection.marketInitialized=true;
-        int ballCost=marketPrice(generateBall(c,101)); int beforePurchase=collection.coins;
-        check(collection.buyMarketBall(0,ballCost) && collection.coins==beforePurchase-ballCost && collection.ownedBallSeeds==std::vector<uint32_t>{101} && collection.marketBallSeeds[0]==0,"Market purchase failed");
+        Fighter cheap,average,legendary; cheap.points=27; average.points=100; legendary.points=172;
+        check(marketPrice(cheap)==100 && marketPrice(average)==3000 && marketPrice(legendary)==100000,"Market price curve misses its reference prices");
+        std::array<int,5> marketBands{};
+        for(uint32_t seed=1;seed<=1000;++seed) {
+            int points=generateMarketBall(c,seed).points;
+            if(points<50) ++marketBands[0]; else if(points<70) ++marketBands[1]; else if(points<=125) ++marketBands[2]; else if(points<=140) ++marketBands[3]; else ++marketBands[4];
+        }
+        check(marketBands[0]>=25 && marketBands[0]<=75 && marketBands[1]>=105 && marketBands[1]<=195 && marketBands[2]>=630 && marketBands[2]<=770 && marketBands[3]>=55 && marketBands[3]<=125 && marketBands[4]>=2 && marketBands[4]<=25,"Market ball distribution is outside its configured rarity bands");
+        int ballCost=marketPrice(generateMarketBall(c,101)); int beforePurchase=collection.coins;
+        check(collection.buyMarketBall(0,ballCost) && collection.coins==beforePurchase-ballCost && collection.ownedBallSeeds==std::vector<uint32_t>{101} && collection.ownedBallMarketGenerated==std::vector<bool>{true} && collection.marketBallSeeds[0]==0,"Market purchase failed");
         check(collection.removeOwnedBall(0) && collection.ownedBallSeeds.empty(),"Owned ball removal failed");
         int beforeRefresh=collection.coins; check(collection.refreshMarket({404,505,606}) && collection.coins==beforeRefresh-1000 && collection.marketBallSeeds[1]==505,"Market refresh failed");
         auto ownedBeforeSeason=collection.ownedBallSeeds; auto marketBeforeSeason=collection.marketBallSeeds; int slotsBeforeSeason=collection.collectionSlots;

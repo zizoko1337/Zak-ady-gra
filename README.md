@@ -4,6 +4,8 @@ Grywalny prototyp 2D: analizujesz dwie losowe kulki, obstawiasz zwycięzcę za w
 
 Interfejs, wyposażenie, zasady i komunikaty gry są teraz w języku angielskim.
 
+Interfejs używa pikselowej czcionki [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans). Pliki fontu i jego licencja SIL Open Font License 1.1 znajdują się w `data/fonts/`.
+
 ## Dźwięki, minki i animacje
 
 - 18 syntetyzowanych efektów dźwiękowych: kliknięcia, odliczanie, start walki, odbicia, broń, trafienia, miny, eksplozje, zdolności, dogrywka i wyniki. Działają lokalnie, bez pobierania plików audio.
@@ -16,11 +18,11 @@ Interfejs, wyposażenie, zasady i komunikaty gry są teraz w języku angielskim.
 
 ## Uruchomienie
 
-Kliknij **`Uruchom.bat`**. Skrypt wybiera najnowszą sprawdzoną kompilację (obecnie `build-r72/OrbitalOdds.exe`). Pliki z folderu `data/` muszą pozostać w folderze projektu. Do grania nie jest potrzebny internet.
+Kliknij **`Uruchom.bat`**. Skrypt wybiera najnowszą sprawdzoną kompilację (obecnie `build-r76/OrbitalOdds.exe`). Pliki z folderu `data/` muszą pozostać w folderze projektu. Do grania nie jest potrzebny internet.
 
-Startujesz z 1000 monet. Wybierz zawodnika, ustaw stawkę i kliknij **Place Bet & Fight**. Wypłata przy kursie 1,90 wynosi 190 monet za zakład 100 monet, czyli 90 monet zysku. Kurs jest stały, a nie obliczany z prawdopodobieństwa wygranej. Remis zwraca stawkę.
+Startujesz z 1000 monet. Wybierz zawodnika, ustaw stawkę i kliknij **Start Fight**. Wypłata przy kursie 1,90 wynosi 190 monet za zakład 100 monet, czyli 90 monet zysku. Kurs jest stały, a nie obliczany z prawdopodobieństwa wygranej. Remis zwraca stawkę.
 
-Zakładka **My Collection** pozwala odblokować do 12 miejsc na własne kulki. Kolejne miejsca kosztują 1000, 2000, 4000 monet itd. **Ball Market** przechowuje trzy oferty, które można dokładnie obejrzeć i kupić; odświeżenie wszystkich ofert kosztuje 1000 monet. Kolekcja i rynek zapisują się w `save.json` i pozostają po rozpoczęciu nowego sezonu. Przycisk deweloperski **Add 10k** można wyłączyć przez ustawienie `ShowDebugAddCoins` na `false` w `src/main.cpp`.
+Zakładka **My Collection** pozwala odblokować do 12 miejsc na własne kulki. Kolejne miejsca kosztują 1000, 2000, 4000 monet itd. **Ball Market** przechowuje trzy oferty, które można dokładnie obejrzeć i kupić; odświeżenie wszystkich ofert kosztuje 1000 monet. Rynek losuje 5% kulek poniżej 50 pkt, 15% w zakresie 50–69, 70% w zakresie 70–125, 9% w zakresie 126–140 i 1% powyżej 140 pkt. Ceny rosną po krzywej wykładniczej: 27 pkt kosztuje 100 monet, 100 pkt 3000, a 172 pkt 100 000. Kolekcja i rynek zapisują się w `save.json` i pozostają po rozpoczęciu nowego sezonu. Przycisk deweloperski **Add 10k** można wyłączyć przez ustawienie `ShowDebugAddCoins` na `false` w `src/main.cpp`.
 
 Wszystkie kulki należące do gracza oraz oferty w Ball Market mają zielony kolor drużyny. Zakładka **Challenges** przedstawia rozgałęzioną mapę wyzwań. Czerwony węzeł **First Spark** jest początkiem pięciu ścieżek: **Group Fights**, **Beasts**, **Trials**, **Duels** i **Bosses**. Każdy dalszy węzeł wymaga ukończenia poprzedniego oraz opłacenia kosztu odblokowania. Po wybraniu wymaganych kulek przycisk **Start Challenge** uruchamia walkę bez zakładu; ukończenie zapisuje się automatycznie.
 
@@ -132,7 +134,7 @@ ctest --test-dir build -C Release --output-on-failure
 
 CMake korzysta z bibliotek w `vendor/`; jeśli ich nie ma, pobiera przypięte wersje z oficjalnych repozytoriów. Wymagane są biblioteki systemowe potrzebne raylib dla danego systemu. Interfejs używa systemowej czcionki Segoe UI na Windows, DejaVu Sans na Linux lub Arial na macOS; bez nich działa czcionka zastępcza z ograniczonym zestawem znaków.
 
-`build-r72/OrbitalOdds.exe --smoke` renderuje ekrany kontrolne do `build/smoke/`, w tym kolekcję i jej popover statystyk, inspekcję kulki, mapę wyzwań, popovery składu i bossa, inspektor przeciwnika oraz pełny przebieg challenge od odliczania do wyniku. Używa odrębnego portfela testowego. Sprawdza zatrzymanie fizyki podczas odliczania, pauzę, czas odliczania przy 16×, pojedyncze rozliczenie zakładu i odtwarzanie dźwięku przez backend (z wyciszonym wyjściem). Zestaw testów bez okna obejmuje dodatkowo dane pięciu ścieżek, walkę 2v2, Wild Doga, oba DPS Checki, Mouse Invasion wraz z atakami dystansowymi i białymi, pojedynek 85 pkt, Twinblade Titana, Ricochet Behemotha oraz wzmocnione przyciąganie Center Gravity z zachowaniem odbić od ścian.
+`build-r76/OrbitalOdds.exe --smoke` renderuje ekrany kontrolne do `build/smoke/`, w tym kolekcję i jej popover statystyk, inspekcję kulki, mapę wyzwań, popovery składu i bossa, inspektor przeciwnika oraz pełny przebieg challenge od odliczania do wyniku. Używa odrębnego portfela testowego. Sprawdza zatrzymanie fizyki podczas odliczania, pauzę, czas odliczania przy 16×, pojedyncze rozliczenie zakładu i odtwarzanie dźwięku przez backend (z wyciszonym wyjściem). Zestaw testów bez okna obejmuje dodatkowo dane pięciu ścieżek, walkę 2v2, Wild Doga, oba DPS Checki, Mouse Invasion wraz z atakami dystansowymi i białymi, pojedynek 85 pkt, Twinblade Titana, Ricochet Behemotha oraz wzmocnione przyciąganie Center Gravity z zachowaniem odbić od ścian.
 
 ## Pliki projektu
 

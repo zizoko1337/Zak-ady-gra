@@ -344,7 +344,38 @@ Fighter generateBall(const Catalog& c,uint32_t seed) {
     Match match=generateMatch(c,seed);
     Fighter fighter=match.fighters[(seed>>31)&1u]; fighter.appearanceSeed=seed; fighter.team=0; return fighter;
 }
-Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,const std::vector<uint32_t>& playerSeeds,uint32_t encounterSeed) {
+struct MarketPointBand { int minimum,maximum; };
+static MarketPointBand marketPointBand(std::mt19937& rng) {
+    int roll=std::uniform_int_distribution<int>(0,99)(rng);
+    if(roll<5) return {27,49};       // 5%: very weak
+    if(roll<20) return {50,69};      // 15%: weak (20% below 70 in total)
+    if(roll<90) return {70,125};     // 70%: standard market ball
+    if(roll<99) return {126,140};    // 9%: strong
+    return {141,172};                // 1%: exceptional
+}
+Fighter generateMarketBall(const Catalog& c,uint32_t seed) {
+    std::mt19937 rng(seed^0x4D41524Bu); // "MARK" keeps market rolls independent from match rolls.
+    MarketPointBand band=marketPointBand(rng);
+    int target=std::uniform_int_distribution<int>(band.minimum,band.maximum)(rng);
+    Fighter best,closest; int bestDistance=std::numeric_limits<int>::max(),closestDistance=std::numeric_limits<int>::max();
+    // The rare bands contain fewer legal loadouts. Keep rolling only until one of their valid combinations appears.
+    for(int attempt=0;attempt<c.rules.candidates || (best.items.empty() && attempt<8000);++attempt) {
+        Fighter candidate=rollFighter(c,rng);
+        int distance=std::abs(candidate.points-target);
+        if(candidate.points>=band.minimum && candidate.points<=band.maximum && distance<bestDistance) { best=candidate; bestDistance=distance; }
+        if(distance<closestDistance) { closest=std::move(candidate); closestDistance=distance; }
+        if(!best.items.empty() && attempt+1>=c.rules.candidates) break;
+    }
+    Fighter fighter=best.items.empty()?closest:best;
+    const std::array<std::string,30> names={"ARIA","BLAZE","CINDER","DRIFT","EMBER","FABLE","GLOW","HAVOC","IRIS","JOLT","KITE","LUMEN","MICA","NIMBUS","ONYX","PIXEL","QUARTZ","RIPPLE","SOL","TEMPO","UMBER","VEX","WISP","XYLO","YARA","ZEPHYR","NOVA","ORBIT","PULSE","RUNE"};
+    fighter.name=names[rng()%names.size()]; fighter.position={0,0}; fighter.previous=fighter.position; fighter.team=0; fighter.appearanceSeed=seed;
+    fighter.title=titleForItem(fighter.items[rng()%fighter.items.size()]);
+    float angle=std::uniform_real_distribution<float>(0,2*Pi)(rng);
+    fighter.velocity={std::cos(angle)*fighter.speed,std::sin(angle)*fighter.speed}; fighter.angle=angle;
+    for(size_t slot=0;slot<fighter.items.size();++slot) fighter.cooldowns[slot]=fighter.items[slot].get("cooldown",1)*std::uniform_real_distribution<float>(0.35f,0.75f)(rng);
+    return fighter;
+}
+Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,const std::vector<uint32_t>& playerSeeds,uint32_t encounterSeed,const std::vector<bool>& marketGenerated) {
     require(playerSeeds.size()==static_cast<size_t>(challenge.requiredBalls),"Challenge squad size does not match its requirement.");
     Match match; match.fighters.clear(); match.seed=encounterSeed; match.challenge=true; match.challengeId=challenge.id;
     match.objectiveType=challenge.objectiveType; match.objectiveTarget=challenge.objectiveTarget;
@@ -361,7 +392,8 @@ Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,
     std::mt19937 rng(encounterSeed);
     const std::array<std::string,12> rivalNames={"ASH","BOLT","CLAW","DUSK","ECHO","FANG","HEX","MOSS","ROOK","SCAR","TALON","VOID"};
     for(size_t index=0;index<playerSeeds.size();++index) {
-        Fighter fighter=generateBall(c,playerSeeds[index]); fighter.team=0; fighter.actorKind="fighter"; fighter.appearanceSeed=playerSeeds[index];
+        bool isMarketBall=marketGenerated.size()==playerSeeds.size() && marketGenerated[index];
+        Fighter fighter=isMarketBall?generateMarketBall(c,playerSeeds[index]):generateBall(c,playerSeeds[index]); fighter.team=0; fighter.actorKind="fighter"; fighter.appearanceSeed=playerSeeds[index];
         fighter.position={-130.0f,(static_cast<float>(index)-(playerSeeds.size()-1)*0.5f)*90.0f}; fighter.previous=fighter.position;
         float angle=std::uniform_real_distribution<float>(-0.6f,0.6f)(rng); fighter.velocity={std::cos(angle)*fighter.speed,std::sin(angle)*fighter.speed};
         match.fighters.push_back(std::move(fighter));
@@ -411,8 +443,11 @@ Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,
     return match;
 }
 int marketPrice(const Fighter& fighter) {
-    int raw=1000+std::max(0,fighter.points)*20;
-    return ((raw+99)/100)*100;
+    // The market scale is exponential in points: 27 pts = 100, 100 pts = 3,000, 172 pts = 100,000.
+    double points=std::clamp(static_cast<double>(fighter.points),27.0,172.0),raw=0;
+    if(points<=100) raw=100.0*std::pow(30.0,(points-27.0)/73.0);
+    else raw=3000.0*std::pow(100000.0/3000.0,(points-100.0)/72.0);
+    return static_cast<int>(std::clamp(std::llround(raw/100.0)*100LL,100LL,100000LL));
 }
 static b2Vec2 physics(Vec v) { return {v.x/40,v.y/40}; }
 static Vec pixels(b2Vec2 v) { return {v.x*40,v.y*40}; }
@@ -1377,7 +1412,7 @@ bool Wallet::unlockCollectionSlot() {
 }
 bool Wallet::buyMarketBall(size_t index,int price) {
     if(index>=marketBallSeeds.size() || marketBallSeeds[index]==0 || price<1 || coins<price || ownedBallSeeds.size()>=static_cast<size_t>(collectionSlots)) return false;
-    coins-=price; ownedBallSeeds.push_back(marketBallSeeds[index]); marketBallSeeds[index]=0; return true;
+    coins-=price; ownedBallSeeds.push_back(marketBallSeeds[index]); ownedBallMarketGenerated.push_back(true); marketBallSeeds[index]=0; return true;
 }
 bool Wallet::refreshMarket(const std::array<uint32_t,3>& seeds) {
     if(coins<1000 || std::ranges::any_of(seeds,[](uint32_t seed){return seed==0;})) return false;
@@ -1385,7 +1420,7 @@ bool Wallet::refreshMarket(const std::array<uint32_t,3>& seeds) {
 }
 bool Wallet::removeOwnedBall(size_t index) {
     if(index>=ownedBallSeeds.size()) return false;
-    ownedBallSeeds.erase(ownedBallSeeds.begin()+static_cast<std::ptrdiff_t>(index)); return true;
+    ownedBallSeeds.erase(ownedBallSeeds.begin()+static_cast<std::ptrdiff_t>(index)); ownedBallMarketGenerated.erase(ownedBallMarketGenerated.begin()+static_cast<std::ptrdiff_t>(index)); return true;
 }
 bool Wallet::challengeUnlocked(const std::string& id) const { return std::find(unlockedChallenges.begin(),unlockedChallenges.end(),id)!=unlockedChallenges.end(); }
 bool Wallet::challengeCompleted(const std::string& id) const { return std::find(completedChallenges.begin(),completedChallenges.end(),id)!=completedChallenges.end(); }
@@ -1403,7 +1438,7 @@ void Wallet::resetSeason(int initialCoins) {
 }
 void Wallet::save(const std::filesystem::path& path) const {
     json j={{"version",1},{"coins",coins},{"wins",wins},{"losses",losses},{"draws",draws},{"rounds",rounds},{"active",active},{"stake",stake},{"selection",selection},
-        {"collection_slots",collectionSlots},{"owned_ball_seeds",ownedBallSeeds},{"market_ball_seeds",marketBallSeeds},{"market_initialized",marketInitialized},
+        {"collection_slots",collectionSlots},{"owned_ball_seeds",ownedBallSeeds},{"owned_ball_market_generated",ownedBallMarketGenerated},{"market_ball_seeds",marketBallSeeds},{"market_initialized",marketInitialized},
         {"unlocked_challenges",unlockedChallenges},{"completed_challenges",completedChallenges}};
     auto temporary=path; temporary+=".tmp";
     { std::ofstream s(temporary); require(s.good(),"Cannot save the wallet."); s<<j.dump(2); s.flush(); require(s.good(),"Wallet save failed."); }
@@ -1422,13 +1457,14 @@ Wallet Wallet::load(const std::filesystem::path& path,int initial) {
     w.coins=j.at("coins"); w.wins=j.at("wins"); w.losses=j.at("losses"); w.draws=j.at("draws"); w.rounds=j.at("rounds");
     require(w.coins>=0 && w.coins<=1000000000 && w.wins>=0 && w.losses>=0 && w.draws>=0 && w.rounds>=0,"Invalid wallet save.");
     w.collectionSlots=j.value("collection_slots",0); w.ownedBallSeeds=j.value("owned_ball_seeds",std::vector<uint32_t>{});
+    w.ownedBallMarketGenerated=j.value("owned_ball_market_generated",std::vector<bool>(w.ownedBallSeeds.size(),false));
     if(j.contains("market_ball_seeds")) {
         auto seeds=j.at("market_ball_seeds").get<std::vector<uint32_t>>(); require(seeds.size()==3,"Invalid market save.");
         std::copy(seeds.begin(),seeds.end(),w.marketBallSeeds.begin());
     }
     w.marketInitialized=j.value("market_initialized",j.contains("market_ball_seeds"));
     w.unlockedChallenges=j.value("unlocked_challenges",std::vector<std::string>{}); w.completedChallenges=j.value("completed_challenges",std::vector<std::string>{});
-    require(w.collectionSlots>=0 && w.collectionSlots<=12 && w.ownedBallSeeds.size()<=static_cast<size_t>(w.collectionSlots),"Invalid collection save.");
+    require(w.collectionSlots>=0 && w.collectionSlots<=12 && w.ownedBallSeeds.size()<=static_cast<size_t>(w.collectionSlots) && w.ownedBallMarketGenerated.size()==w.ownedBallSeeds.size(),"Invalid collection save.");
     require(std::ranges::none_of(w.ownedBallSeeds,[](uint32_t seed){return seed==0;}),"Invalid owned ball seed.");
     auto validProgress=[](const std::vector<std::string>& values) { std::set<std::string> unique; for(const auto& value:values) if(value.empty() || value.size()>80 || !unique.insert(value).second) return false; return values.size()<=512; };
     require(validProgress(w.unlockedChallenges) && validProgress(w.completedChallenges),"Invalid challenge progress save.");

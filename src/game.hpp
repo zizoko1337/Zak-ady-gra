@@ -108,7 +108,8 @@ struct Match {
 };
 Match generateMatch(const Catalog& catalog,uint32_t seed);
 Fighter generateBall(const Catalog& catalog,uint32_t seed);
-Match buildChallengeMatch(const Catalog& catalog,const ChallengeDefinition& challenge,const std::vector<uint32_t>& playerSeeds,uint32_t encounterSeed);
+Fighter generateMarketBall(const Catalog& catalog,uint32_t seed);
+Match buildChallengeMatch(const Catalog& catalog,const ChallengeDefinition& challenge,const std::vector<uint32_t>& playerSeeds,uint32_t encounterSeed,const std::vector<bool>& marketGenerated={});
 int marketPrice(const Fighter& fighter);
 struct Projectile {
     Vec position,previous,velocity; int owner; float damage,radius,life; std::string kind;
@@ -203,6 +204,8 @@ struct Wallet {
     int stake=0,selection=-1;
     int collectionSlots=0;
     std::vector<uint32_t> ownedBallSeeds;
+    // Old collection entries retain their original random generator. New market purchases use the market distribution.
+    std::vector<bool> ownedBallMarketGenerated;
     std::array<uint32_t,3> marketBallSeeds{};
     bool marketInitialized=false;
     std::vector<std::string> unlockedChallenges,completedChallenges;
