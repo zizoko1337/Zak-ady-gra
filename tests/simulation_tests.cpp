@@ -69,7 +69,7 @@ int main(int argc,char** argv) {
             for(uint32_t seed=1;seed<2000;++seed) geodeTiers.insert(geodeReward(seed).tier);
             check(geodeTiers.size()==8,"Geode reward table should include empty and seven mineral tiers");
             Match geodeMatch=buildGeodeMatch(c,generateBall(c,9182),42817);
-            check(geodeMatch.arena.id=="arena.circle" && geodeMatch.fighters.size()==2 && geodeMatch.fighters[0].team==0 && geodeMatch.fighters[1].actorKind=="geode" && geodeMatch.fighters[1].stationary && geodeMatch.fighters[1].harmless && geodeMatch.fighters[1].maxHp==10000,"Geode breaking match is configured incorrectly");
+            check(geodeMatch.arena.id=="arena.circle" && geodeMatch.fighters.size()==2 && geodeMatch.fighters[0].team==0 && geodeMatch.fighters[1].actorKind=="geode" && geodeMatch.fighters[1].stationary && geodeMatch.fighters[1].harmless && geodeMatch.fighters[1].maxHp==10000 && geodeMatch.fighters[1].position.x==0 && geodeMatch.fighters[1].position.y==0,"Geode breaking match is configured incorrectly");
         }
         check(c.rules.limit==180 && c.rules.suddenDps==0,"Fights should draw after three minutes with no overtime damage");
         check(findItem(c,"weapon.pistol").get("damage")==40,"Heavy Pistol damage should be 40");

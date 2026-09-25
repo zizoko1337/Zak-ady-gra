@@ -29,6 +29,32 @@ const Color Border{40,52,69,255},Muted{135,152,173,255},White{234,241,249,255};
 const Color Accent{211,248,117,255},Cyan{76,217,242,255},Coral{255,126,144,255};
 const Color PlayerGreen{82,224,126,255};
 const Color Team[2]={Cyan,Coral};
+uint32_t geodeVisualHash(uint32_t value) {
+    value^=value>>16; value*=0x7feb352du; value^=value>>15; value*=0x846ca68bu; return value^(value>>16);
+}
+void drawGeode(Vector2 center,float radius,uint32_t seed,float integrity=1) {
+    static const std::array<Color,5> shells={Color{69,82,99,255},Color{81,91,104,255},Color{75,91,100,255},Color{88,87,103,255},Color{67,90,105,255}};
+    static const std::array<Color,5> facets={Color{101,119,140,255},Color{120,127,139,255},Color{94,128,136,255},Color{132,112,145,255},Color{89,122,148,255}};
+    uint32_t shape=geodeVisualHash(seed),detailSeed=geodeVisualHash(seed^0x9e3779b9u);
+    int sides=7+static_cast<int>(shape%5); float rotation=static_cast<float>((shape>>8)%360);
+    float outer=radius*(0.88f+static_cast<float>((shape>>18)%13)/100.0f),inner=outer*(0.56f+static_cast<float>((shape>>24)%10)/100.0f);
+    Color shell=shells[(shape>>4)%shells.size()],facet=facets[(shape>>12)%facets.size()];
+    DrawPoly(center,sides,outer,rotation,shell); DrawPolyLines(center,sides,outer,rotation,Fade(White,0.58f));
+    DrawPoly(center,5+(detailSeed%3),inner,rotation-18,facet);
+    for(int chip=0;chip<2+static_cast<int>((detailSeed>>5)%4);++chip) {
+        uint32_t value=geodeVisualHash(detailSeed+static_cast<uint32_t>(chip)*0x85ebca6bu);
+        float angle=static_cast<float>(value%6283)/1000.0f, distance=outer*(0.25f+static_cast<float>((value>>12)%40)/100.0f);
+        float chipRadius=radius*(0.055f+static_cast<float>((value>>20)%5)/100.0f);
+        DrawCircleV({center.x+std::cos(angle)*distance,center.y+std::sin(angle)*distance},chipRadius,Fade(White,0.10f+0.08f*(chip%2)));
+    }
+    for(int crack=0;crack<5;++crack) {
+        uint32_t value=geodeVisualHash(shape+static_cast<uint32_t>(crack)*0xc2b2ae35u);
+        float angle=static_cast<float>(value%6283)/1000.0f,crackLength=(1-integrity)*(outer*0.78f)+(crack%2)*5;
+        Vector2 start{center.x+std::cos(angle)*5,center.y+std::sin(angle)*5};
+        Vector2 end{start.x+std::cos(angle+0.25f)*crackLength,start.y+std::sin(angle+0.25f)*crackLength};
+        DrawLineEx(start,end,2,Fade(Background,0.75f));
+    }
+}
 void drawSkeletonPortrait(Vector2 center,float radius,bool boss=false) {
     Color bone{213,218,210,255};
     DrawCircleV(center,radius+3,boss?Accent:Color{105,115,122,255}); DrawCircleV(center,radius,bone);
@@ -223,10 +249,6 @@ bool ballPopoverActive=false;
             ownedBallCache.push_back(marketBall?generateMarketBall(catalog,seed):generateBall(catalog,seed));
         }
         for(size_t n=0;n<marketBallCache.size();++n) marketBallCache[n]=wallet.marketBallSeeds[n]?generateMarketBall(catalog,wallet.marketBallSeeds[n]):Fighter{};
-    }
-    Color geodeColor(int tier) const {
-        static const std::array<Color,8> colors={Color{91,102,116,255},Color{180,171,153,255},Color{159,107,227,255},Color{247,201,75,255},Color{255,121,81,255},Color{81,211,232,255},Color{239,73,93,255},Color{220,246,255,255}};
-        return colors[std::clamp(tier,0,7)];
     }
     void openInspector(const Fighter& fighter,uint32_t seed,int marketIndex=-1,int ownedIndex=-1,bool challengeEnemy=false,Color color=PlayerGreen) {
         inspectedBall=fighter; inspectionSeed=seed; inspectionMarket=marketIndex; inspectionOwned=ownedIndex; inspectionChallengeEnemy=challengeEnemy; inspectionColor=color; inspectionOpen=true; pendingRemove=-1;
@@ -474,7 +496,8 @@ bool ballPopoverActive=false;
             catch(const std::exception& e) { wallet=std::move(before); error=e.what(); return; }
         }
         Fighter breaker=ownedBallCache[selectedGeodeBreaker]; breaker.appearanceSeed=wallet.ownedBallSeeds[selectedGeodeBreaker];
-        sim=std::make_unique<Simulation>(buildGeodeMatch(catalog,breaker,geode.seed),catalog.rules);
+        Rules geodeRules=catalog.rules; geodeRules.limit=1000000000.0f; geodeRules.suddenDps=0;
+        sim=std::make_unique<Simulation>(buildGeodeMatch(catalog,breaker,geode.seed),geodeRules);
         geostoneBattleOpen=true; geodeResultSaved=false; activeGeode=selectedGeode; openedGeodeReward={};
         paused=false; accumulator=0; resultAge=0; lastEvent=0; floating.clear(); impacts.clear(); messageCooldown.assign(sim->match.fighters.size(),0); countdown.start();
         if(audioBank) audioBank->play(Cue::Tick);
@@ -579,13 +602,12 @@ bool ballPopoverActive=false;
         if(geostoneBattleOpen && side==1) {
             box({x,96,210,700},Panel,Fade(color,0.7f),0.04f); DrawRectangleRounded({x+1,97,208,4},0.5f,6,color);
             text("GEOSTONE",x+16,114,11,color); fitted("SEALED GEODE",x+16,153,178,18);
-            Vector2 p{x+105,213}; DrawPoly(p,8,48,22,Color{62,75,91,255}); DrawPolyLines(p,8,48,22,Fade(White,0.55f)); DrawPoly(p,6,29,-8,Color{88,105,125,255});
+            Vector2 p{x+105,213}; drawGeode(p,48,f.appearanceSeed,std::clamp(f.hp/f.maxHp,0.0f,1.0f));
             float hp=std::clamp(f.hp/f.maxHp,0.0f,1.0f); text("INTEGRITY",x+16,280,10,Muted); fitted(number(f.hp)+" / 10,000",x+16,299,165,15,color);
             DrawRectangleRounded({x+16,325,178,7},1,8,Border); DrawRectangleRounded({x+16,325,178*hp,7},1,8,color);
             text("STATIONARY",x+16,357,10,Muted); text("HARMLESS",x+16,378,10,Muted);
             DrawLineEx({x+16,419},{x+194,419},1,Border); text("CONTENTS",x+16,430,10,Muted);
-            text("LOCKED TO SEED",x+16,460,13,White); text("Revealed only after",x+16,490,11,Muted); text("the geode shatters.",x+16,509,11,Muted);
-            text("SEED "+std::to_string(activeGeode>=0?wallet.geodes[activeGeode].seed:0),x+16,555,10,color);
+            text("UNIQUE FORM",x+16,460,13,White); text("Its shape and details",x+16,490,11,Muted); text("are locked to its seed.",x+16,509,11,Muted);
             return;
         }
         box({x,96,210,700},Panel,selected==side?Fade(color,0.7f):Border,0.04f);
@@ -903,14 +925,7 @@ bool ballPopoverActive=false;
             DrawCircleV({p.x+2,p.y+5},f.radius,Color{4,8,14,200});
             if(f.actorKind=="geode") {
                 float integrity=std::clamp(f.hp/f.maxHp,0.0f,1.0f);
-                Color shell{69,82,99,255},facet{101,119,140,255};
-                DrawPoly(p,8,f.radius,22,shell); DrawPolyLines(p,8,f.radius,22,Fade(White,0.58f)); DrawPoly(p,6,f.radius*0.64f,-8,facet);
-                for(int crack=0;crack<5;++crack) {
-                    float angle=0.55f+crack*1.21f; float crackLength=(1-integrity)*(f.radius*0.75f)+(crack%2)*6;
-                    Vec start{std::cos(angle)*5,std::sin(angle)*5},end=start+Vec{std::cos(angle+0.25f),std::sin(angle+0.25f)}*crackLength;
-                    DrawLineEx({p.x+start.x,p.y+start.y},{p.x+end.x,p.y+end.y},2,Fade(Background,0.75f));
-                }
-                DrawCircleV({p.x-f.radius*0.28f,p.y-f.radius*0.31f},f.radius*0.15f,Fade(White,0.22f));
+                drawGeode(p,f.radius,f.appearanceSeed,integrity);
             }
             bool skeleton=f.actorKind=="skeleton" || f.actorKind=="skeleton_boss";
             Color body=skeleton?Color{205,210,205,255}:f.actorKind=="dire_wolf"?Color{92,61,41,255}:f.actorKind=="wild_dog"?Color{145,91,48,255}:f.actorKind=="goblin"?Color{80,184,97,255}:f.actorKind=="treasure_chest"?Color{151,91,38,255}:f.actorKind=="dummy"?Color{137,120,96,255}:f.actorKind=="boss"?Color{255,174,62,255}:c;
@@ -1046,7 +1061,7 @@ bool ballPopoverActive=false;
         if(geostoneBattleOpen) {
             box({28,810,1384,82},Panel,Border,0.08f); DrawRectangleRounded({29,811,4,80},0.5f,6,Accent);
             text("GEOSTONE RUN",51,821,10,Accent);
-            if(activeGeode>=0 && activeGeode<static_cast<int>(wallet.geodes.size())) text("SEED "+std::to_string(wallet.geodes[activeGeode].seed),51,846,18,White);
+            text("UNIQUE SEALED GEODE",51,846,18,White);
             text(sim&&sim->finished?(sim->winner==0?(openedGeodeReward.coins>0?openedGeodeReward.mineral+"  +"+std::to_string(openedGeodeReward.coins)+" coins":"EMPTY GEODE"):"GEODE STILL INTACT"):"Destroy the 10,000 HP geode to reveal its crystal.",350,840,14,sim&&sim->finished?Accent:Muted);
             if(sim&&sim->finished) {
                 if(button({1102,825,286,51},"BACK TO GEOSTONES",true,true,Accent,14)) leaveGeostones();
@@ -1377,11 +1392,10 @@ bool ballPopoverActive=false;
             bool hover=!inputBlocked && available && inside(card);
             box(card,chosen?Color{34,43,59,255}:PanelAlt,chosen?Accent:Border,0.08f);
             Vector2 crystal{x+55,y+72};
-            DrawPoly(crystal,8,40,22,Color{64,76,91,255}); DrawPolyLines(crystal,8,40,22,Fade(White,0.45f));
-            DrawPoly(crystal,6,24,-8,Color{90,105,123,255}); DrawCircleV({crystal.x-9,crystal.y-10},5,Fade(White,0.28f));
+            drawGeode(crystal,40,geode.seed,1);
             if(geode.opened) { DrawCircleV(crystal,26,Color{25,32,43,255}); DrawLineEx({crystal.x-17,crystal.y-17},{crystal.x+17,crystal.y+17},3,Muted); DrawLineEx({crystal.x-17,crystal.y+17},{crystal.x+17,crystal.y-17},3,Muted); }
             text(geode.opened?"OPENED":"SEALED GEODE",x+105,y+25,15,geode.opened?Muted:White);
-            text("SEED "+std::to_string(geode.seed),x+105,y+51,9,Muted);
+            text("UNIQUE SEALED FORM",x+105,y+51,9,Muted);
             std::string state=geode.opened?"CONTENT CLAIMED":geode.purchased?"READY TO CRACK":"1,000 COINS";
             text(state,x+105,y+83,12,geode.opened?Muted:geode.purchased?PlayerGreen:Accent);
             if(hover) { SetMouseCursor(MOUSE_CURSOR_POINTING_HAND); if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { selectedGeode=static_cast<int>(index); if(audioBank) audioBank->play(Cue::Click); } }
@@ -1404,7 +1418,7 @@ bool ballPopoverActive=false;
         bool geodeReady=selectedGeode>=0 && selectedGeode<static_cast<int>(wallet.geodes.size()) && !wallet.geodes[selectedGeode].opened;
         bool breakerReady=selectedGeodeBreaker>=0 && selectedGeodeBreaker<static_cast<int>(ownedBallCache.size());
         if(geodeReady) {
-            const auto& geode=wallet.geodes[selectedGeode]; text("SELECTED GEODE",1016,510,10,Muted); text("SEED "+std::to_string(geode.seed),1016,531,17,White);
+            const auto& geode=wallet.geodes[selectedGeode]; text("SELECTED GEODE",1016,510,10,Muted); text("UNIQUE SEALED FORM",1016,531,15,White);
             text(geode.purchased?"Already paid. Retry until it breaks.":"PRICE",1016,570,11,Muted);
             text(geode.purchased?"READY":"1,000 COINS",1016,592,24,geode.purchased?PlayerGreen:Accent);
         } else { centered("Choose a sealed geode",1201,538,14,Muted); }

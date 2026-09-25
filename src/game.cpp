@@ -592,7 +592,7 @@ Match buildGeodeMatch(const Catalog& c,const Fighter& breaker,uint32_t geodeSeed
     player.hp=player.maxHp; player.velocity={player.speed,0}; player.angle=0; player.damageDealt=0;
     std::fill(player.cooldowns.begin(),player.cooldowns.end(),0); std::fill(player.hitCooldowns.begin(),player.hitCooldowns.end(),0);
     Fighter geode; geode.name="SEALED GEODE"; geode.title="the Unknown"; geode.actorKind="geode"; geode.team=1;
-    geode.maxHp=geode.hp=10000; geode.radius=46; geode.position={78,0}; geode.previous=geode.position;
+    geode.maxHp=geode.hp=10000; geode.radius=46; geode.position={0,0}; geode.previous=geode.position;
     geode.stationary=true; geode.harmless=true; geode.contactDamage=0; geode.appearanceSeed=geodeSeed;
     match.fighters={std::move(player),std::move(geode)};
     return match;
