@@ -574,15 +574,15 @@
     },
     {
       "id": "challenge.ranged_battery",
-      "name": "Storm Battery",
-      "description": "A ranged 1v1 against a 133-point Scattergun and Poison Dart fighter with Fast Reload, Crit Striker, Power Up and Combo Master.",
+      "name": "Shuriken Tempo",
+      "description": "A ranged 1v1 against a 130-point dual-Shuriken fighter with Combo Master, Fast Reload, Dodge and Power Up.",
       "color": "orange",
       "branch": "DUELS · RANGED",
       "prerequisites": ["challenge.ranged_slinger"],
       "unlock_cost": 3500,
       "required_balls": 1,
       "map": {"x": 480, "y": 1151},
-      "encounter": {"type": "duel", "arena_id": "arena.diamond", "arena_effect": "", "time_limit": 90, "objective": {"type": "defeat_all", "target": 1}, "actors": [{"id": "storm_battery", "display_name": "STORM BATTERY", "kind": "custom", "team": "enemy", "seed": 53003, "position": [130, 0], "loadout": ["weapon.scatter", "weapon.poison_dart", "stat.fast_reload", "stat.crit_striker", "stat.power", "stat.combo_master"]}], "arena_objects": []}
+      "encounter": {"type": "duel", "arena_id": "arena.diamond", "arena_effect": "", "time_limit": 90, "objective": {"type": "defeat_all", "target": 1}, "actors": [{"id": "shuriken_tempo", "display_name": "SHURIKEN TEMPO", "kind": "custom", "team": "enemy", "seed": 53003, "position": [130, 0], "loadout": ["weapon.shuriken", "weapon.shuriken", "stat.combo_master", "stat.fast_reload", "ability.dodge", "stat.power"]}], "arena_objects": []}
     },
     {
       "id": "challenge.first_dungeon",
