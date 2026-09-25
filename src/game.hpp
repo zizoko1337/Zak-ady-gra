@@ -72,6 +72,17 @@ struct ChallengeCatalog {
     static ChallengeCatalog load(const std::filesystem::path& path,const Catalog& catalog);
     const ChallengeDefinition* find(const std::string& id) const;
 };
+struct DungeonExit {
+    std::string direction,destination;
+};
+struct DungeonRoomDefinition {
+    std::string id,name;
+    ChallengeDefinition encounter;
+    std::vector<DungeonExit> exits;
+    bool entrance=false,treasure=false,boss=false;
+};
+const std::vector<DungeonRoomDefinition>& dungeonRooms();
+const DungeonRoomDefinition* findDungeonRoom(const std::string& id);
 struct Fighter {
     std::string name,title;
     std::string actorKind="fighter";
@@ -82,7 +93,8 @@ struct Fighter {
     Vec position,previous,velocity;
     float angle=0,flash=0,wallCooldown=0,boostTime=0,boostMultiplier=1,invulnerable=0;
     float shield=0,shieldTime=0,damageDealt=0,poisonDps=0,poisonTick=0,slowTime=0,slowMultiplier=1,tapeChance=0,comboWindow=0;
-    bool centerHealingInside=false,stationary=false,harmless=false,physicsDisabled=false,hidden=false,untargetable=false;
+    float potionRegenTime=0,potionArmorTime=0,potionDamageTime=0;
+    bool centerHealingInside=false,stationary=false,harmless=false,physicsDisabled=false,hidden=false,untargetable=false,preserveCooldowns=false;
     float contactDamage=-1,specialCooldown=0;
     int poisonOwner=-1;
     float stunTime=0,wallStunWindow=0,knockbackTime=0;
@@ -96,6 +108,10 @@ struct MouseInvasionSetup {
     float interval=1,hp=1,radius=7,speed=165,damage=5,biteCooldown=2;
     int maxCount=20;
 };
+struct TargetWaveSetup {
+    bool enabled=false;
+    int targetsPerPhase=10,phaseCount=1,startPhase=0;
+};
 struct Match {
     uint32_t seed=0;
     Arena arena;
@@ -105,11 +121,13 @@ struct Match {
     std::string challengeId,objectiveType;
     float objectiveTarget=0;
     MouseInvasionSetup mouseInvasion;
+    TargetWaveSetup targetWaves;
 };
 Match generateMatch(const Catalog& catalog,uint32_t seed);
 Fighter generateBall(const Catalog& catalog,uint32_t seed);
 Fighter generateMarketBall(const Catalog& catalog,uint32_t seed);
 Match buildChallengeMatch(const Catalog& catalog,const ChallengeDefinition& challenge,const std::vector<uint32_t>& playerSeeds,uint32_t encounterSeed,const std::vector<bool>& marketGenerated={});
+Match buildDungeonRoomMatch(const Catalog& catalog,const DungeonRoomDefinition& room,const std::vector<Fighter>& party,uint32_t encounterSeed);
 int marketPrice(const Fighter& fighter);
 struct Projectile {
     Vec position,previous,velocity; int owner; float damage,radius,life; std::string kind;
@@ -182,6 +200,7 @@ public:
     std::vector<FieldShape> fieldShapes;
     std::vector<Burst> bursts;
     std::vector<Event> events;
+    int activeTargetWave=0,targetWaveTotal=0;
 private:
     b2WorldId world{};
     std::vector<b2BodyId> bodies;
@@ -190,6 +209,7 @@ private:
     uint64_t criticalSerial=0;
     float invasionMouseTimer=0;
     int invasionMouseOwner=-1,invasionMouseSerial=0;
+    std::vector<int> targetWaveIndices;
     bool criticalHit(int source);
     bool enemies(int first,int second) const;
     int closestEnemy(int owner,Vec from) const;

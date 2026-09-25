@@ -8,6 +8,7 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <set>
 #include <sstream>
 
 #if defined(_WIN32)
@@ -28,6 +29,15 @@ const Color Border{40,52,69,255},Muted{135,152,173,255},White{234,241,249,255};
 const Color Accent{211,248,117,255},Cyan{76,217,242,255},Coral{255,126,144,255};
 const Color PlayerGreen{82,224,126,255};
 const Color Team[2]={Cyan,Coral};
+void drawSkeletonPortrait(Vector2 center,float radius,bool boss=false) {
+    Color bone{213,218,210,255};
+    DrawCircleV(center,radius+3,boss?Accent:Color{105,115,122,255}); DrawCircleV(center,radius,bone);
+    DrawCircleV({center.x-radius*0.34f,center.y-radius*0.16f},radius*0.18f,Background);
+    DrawCircleV({center.x+radius*0.34f,center.y-radius*0.16f},radius*0.18f,Background);
+    DrawTriangle({center.x,center.y+radius*0.02f},{center.x-radius*0.12f,center.y+radius*0.3f},{center.x+radius*0.12f,center.y+radius*0.3f},Background);
+    DrawRectangleRec({center.x-radius*0.43f,center.y+radius*0.45f,radius*0.86f,radius*0.25f},Background);
+    for(int tooth=-1;tooth<=1;++tooth) DrawLineEx({center.x+tooth*radius*0.22f,center.y+radius*0.45f},{center.x+tooth*radius*0.22f,center.y+radius*0.7f},1,bone);
+}
 Font uiFont{},displayFont{}; Vector2 mouse{}; bool inputBlocked=false;
 AudioBank* audioBank=nullptr;
 Vector2 point(Vec v) { return {720+v.x,427+v.y}; }
@@ -138,6 +148,16 @@ struct App {
     std::vector<Fighter> challengeEnemyPreview;
     int challengeEnemyPreviewIndex=-1;
     std::string activeChallengeId;
+    bool dungeonActive=false,dungeonWaitingForDoor=false,dungeonRoomResolved=false,dungeonFinished=false;
+    std::string dungeonRoomId,dungeonTransitionTarget,dungeonTransitionDirection,dungeonRewardMessage;
+    std::vector<Fighter> dungeonParty;
+    std::set<std::string> dungeonClearedRooms;
+    std::array<int,3> dungeonPotions{};
+    int dungeonDraggedPotion=-1;
+    int dungeonLootPotion=-1;
+    float dungeonLootFlight=-1;
+    float dungeonTransition=0;
+    bool dungeonTransitionSwapped=false;
     Vec challengeMapCamera{};
     float challengeMapZoom=1;
     bool challengeMapViewReady=false;
@@ -154,7 +174,7 @@ struct App {
     float realClock=0,resultAge=0,hitStop=0,tiltTimer=0,tiltTotal=0,tiltKick=0,screenTilt=0;
     std::string error;
     const Item* hovered=nullptr;
-    bool ballPopoverActive=false;
+bool ballPopoverActive=false;
     Fighter ballPopoverFighter;
     Color ballPopoverColor=PlayerGreen;
     explicit App(std::filesystem::path path):root(std::move(path)),catalog(Catalog::load(root/"data/catalog.json")),challenges(ChallengeCatalog::load(root/"data/challenges.json",catalog)),wallet(Wallet::load(root/"save.json",catalog.rules.startingCoins)) {
@@ -308,8 +328,114 @@ struct App {
         countdown.start(); floating.clear();
         if(audioBank) audioBank->play(Cue::Tick);
     }
+    void resetDungeonFighterForRoom(Fighter& fighter) {
+        fighter.stationary=false; fighter.physicsDisabled=false; fighter.hidden=false; fighter.untargetable=false;
+        fighter.flash=fighter.wallCooldown=fighter.boostTime=fighter.invulnerable=0;
+        // Room-only effects do not leak into the next room; reloads, HP and potion buffs intentionally do.
+        fighter.shield=fighter.shieldTime=fighter.poisonDps=fighter.poisonTick=fighter.slowTime=fighter.comboWindow=0;
+        fighter.poisonOwner=-1; fighter.stunTime=fighter.wallStunWindow=fighter.knockbackTime=0;
+        fighter.boostMultiplier=1; fighter.slowMultiplier=1; fighter.knockbackDirection={}; fighter.damageDealt=0;
+    }
+    void enterDungeonRoom(const std::string& roomId) {
+        const auto* room=findDungeonRoom(roomId);
+        if(!room || dungeonParty.empty()) { error="Dungeon room data is invalid."; dungeonFinished=true; return; }
+        for(auto& fighter:dungeonParty) resetDungeonFighterForRoom(fighter);
+        bool alreadyCleared=dungeonClearedRooms.contains(roomId);
+        DungeonRoomDefinition setup=*room;
+        if(alreadyCleared) setup.entrance=true;
+        Match encounter=buildDungeonRoomMatch(catalog,setup,dungeonParty,random());
+        Rules roomRules=catalog.rules; roomRules.limit=room->encounter.timeLimit; roomRules.suddenDps=0; roomRules.sudden=roomRules.limit;
+        sim=std::make_unique<Simulation>(encounter,roomRules); dungeonRoomId=roomId; dungeonRoomResolved=alreadyCleared;
+        dungeonWaitingForDoor=alreadyCleared; paused=false; accumulator=0; resultAge=0; lastEvent=0;
+        dungeonRewardMessage=alreadyCleared?"CHOOSE A DOOR":"";
+        floating.clear(); impacts.clear(); messageCooldown.assign(sim->match.fighters.size(),0);
+        if(alreadyCleared) { sim->finished=true; sim->winner=0; countdown.reset(); }
+        else { countdown.start(); if(audioBank) audioBank->play(Cue::Tick); }
+    }
+    void startDungeon(const ChallengeDefinition& challenge) {
+        dungeonParty.clear();
+        for(uint32_t seed:challengeSquadSeeds) {
+            auto found=std::find(wallet.ownedBallSeeds.begin(),wallet.ownedBallSeeds.end(),seed);
+            if(found==wallet.ownedBallSeeds.end()) continue;
+            size_t index=static_cast<size_t>(found-wallet.ownedBallSeeds.begin());
+            Fighter fighter=ownedBallCache[index]; fighter.appearanceSeed=seed; fighter.team=0; fighter.actorKind="fighter";
+            resetDungeonFighterForRoom(fighter); dungeonParty.push_back(std::move(fighter));
+        }
+        if(dungeonParty.size()!=3) { error="Select exactly three owned balls for the dungeon."; dungeonParty.clear(); return; }
+        dungeonActive=true; dungeonFinished=false; dungeonWaitingForDoor=true; dungeonRoomResolved=true;
+        dungeonClearedRooms.clear(); dungeonClearedRooms.insert("entrance"); dungeonPotions={0,0,0}; dungeonDraggedPotion=-1;
+        dungeonTransition=0; dungeonTransitionTarget.clear(); dungeonRewardMessage.clear(); dungeonLootPotion=-1; dungeonLootFlight=-1; activeChallengeId=challenge.id;
+        challengeBattleOpen=true; challengeResultSaved=false; enterDungeonRoom("entrance");
+    }
+    void captureDungeonParty() {
+        if(!sim) return;
+        std::vector<Fighter> survivors;
+        for(auto fighter:sim->match.fighters) if(fighter.team==0 && fighter.hp>0) {
+            resetDungeonFighterForRoom(fighter); survivors.push_back(std::move(fighter));
+        }
+        dungeonParty=std::move(survivors);
+    }
+    void resolveDungeonRoom() {
+        if(!dungeonActive || dungeonRoomResolved || !sim || !sim->finished) return;
+        dungeonRoomResolved=true; resultAge=0; floating.clear(); captureDungeonParty();
+        const auto* room=findDungeonRoom(dungeonRoomId);
+        if(sim->winner!=0 || dungeonParty.empty()) {
+            dungeonFinished=true; dungeonWaitingForDoor=false; challengeResultSaved=true;
+            if(audioBank) audioBank->play(Cue::Lose);
+            return;
+        }
+        bool firstClear=dungeonClearedRooms.insert(dungeonRoomId).second;
+        if(room && room->boss) {
+            dungeonFinished=true; dungeonWaitingForDoor=false; challengeResultSaved=true;
+            wallet.completeChallenge(activeChallengeId); persist(); if(audioBank) audioBank->play(Cue::Win); return;
+        }
+        if(room && room->treasure && firstClear) {
+            int potion=static_cast<int>(random()%3); ++dungeonPotions[potion];
+            dungeonLootPotion=potion; dungeonLootFlight=0;
+            static const std::array<const char*,3> names={"REGENERATION POTION","ARMOR POTION","ATTACK POTION"};
+            dungeonRewardMessage=std::string("CHEST DROP: ")+names[potion];
+        } else dungeonRewardMessage="ROOM CLEARED";
+        if(room) {
+            DungeonRoomDefinition resting=*room; resting.entrance=true;
+            Match cleared=buildDungeonRoomMatch(catalog,resting,dungeonParty,random());
+            Rules roomRules=catalog.rules; roomRules.limit=room->encounter.timeLimit; roomRules.suddenDps=0;
+            sim=std::make_unique<Simulation>(cleared,roomRules); sim->finished=true; sim->winner=0;
+            messageCooldown.assign(sim->match.fighters.size(),0); lastEvent=0;
+        }
+        dungeonWaitingForDoor=true; if(audioBank) audioBank->play(Cue::Win);
+    }
+    void beginDungeonTransition(const std::string& target) {
+        if(!dungeonActive || !dungeonWaitingForDoor || dungeonTransition>0) return;
+        const auto* room=findDungeonRoom(dungeonRoomId);
+        if(!room || std::ranges::none_of(room->exits,[&](const DungeonExit& exit){return exit.destination==target;})) return;
+        dungeonTransitionTarget=target;
+        auto exit=std::find_if(room->exits.begin(),room->exits.end(),[&](const DungeonExit& value){ return value.destination==target; });
+        dungeonTransitionDirection=exit==room->exits.end()?"":exit->direction;
+        dungeonTransition=0.001f; dungeonTransitionSwapped=false; dungeonDraggedPotion=-1;
+        if(audioBank) audioBank->play(Cue::Click);
+    }
+    void updateDungeonTransition(float dt) {
+        if(dungeonTransition<=0) return;
+        dungeonTransition+=dt;
+        if(!dungeonTransitionSwapped && dungeonTransition>=0.55f) {
+            dungeonTransitionSwapped=true; enterDungeonRoom(dungeonTransitionTarget);
+        }
+        if(dungeonTransition>=1.1f) { dungeonTransition=0; dungeonTransitionTarget.clear(); dungeonTransitionDirection.clear(); dungeonTransitionSwapped=false; }
+    }
+    void applyDungeonPotion(int potion,Fighter& fighter) {
+        if(potion<0 || potion>=3 || dungeonPotions[potion]<=0 || fighter.hp<=0) return;
+        if(potion==0) fighter.potionRegenTime=std::max(fighter.potionRegenTime,10.0f);
+        if(potion==1) fighter.potionArmorTime=std::max(fighter.potionArmorTime,60.0f);
+        if(potion==2) fighter.potionDamageTime=std::max(fighter.potionDamageTime,60.0f);
+        --dungeonPotions[potion];
+        for(auto& saved:dungeonParty) if(saved.appearanceSeed==fighter.appearanceSeed) {
+            saved.potionRegenTime=fighter.potionRegenTime; saved.potionArmorTime=fighter.potionArmorTime; saved.potionDamageTime=fighter.potionDamageTime; break;
+        }
+        if(audioBank) audioBank->play(Cue::Heal);
+    }
     void startChallenge(const ChallengeDefinition& challenge) {
         if(challengeBattleOpen || !wallet.challengeUnlocked(challenge.id) || challengeSquadSeeds.size()!=static_cast<size_t>(challenge.requiredBalls)) return;
+        if(challenge.id=="challenge.first_dungeon") { startDungeon(challenge); return; }
         std::vector<bool> marketGenerated;
         for(uint32_t seed:challengeSquadSeeds) {
             auto found=std::find(wallet.ownedBallSeeds.begin(),wallet.ownedBallSeeds.end(),seed);
@@ -326,8 +452,11 @@ struct App {
     void leaveChallenge() {
         sim.reset(); challengeBattleOpen=false; challengeResultSaved=false; activeChallengeId.clear(); paused=false; countdown.reset();
         accumulator=0; resultAge=0; lastEvent=0; floating.clear(); impacts.clear(); messageCooldown.assign(2,0);
+        dungeonActive=false; dungeonFinished=false; dungeonWaitingForDoor=false; dungeonRoomResolved=false; dungeonParty.clear();
+        dungeonClearedRooms.clear(); dungeonPotions={0,0,0}; dungeonDraggedPotion=-1; dungeonLootPotion=-1; dungeonLootFlight=-1; dungeonTransition=0; dungeonTransitionTarget.clear(); dungeonTransitionDirection.clear();
     }
     void settle() {
+        if(dungeonActive && sim && sim->finished) { resolveDungeonRoom(); return; }
         if(challengeBattleOpen && sim && sim->finished) {
             if(!challengeResultSaved) {
                 challengeResultSaved=true; resultAge=0; floating.clear();
@@ -344,6 +473,7 @@ struct App {
     }
     void update(float dt) {
         dt=std::clamp(dt,0.0f,0.1f); realClock+=dt;
+        if(dungeonLootFlight>=0) { dungeonLootFlight+=dt; if(dungeonLootFlight>=0.9f) { dungeonLootFlight=-1; dungeonLootPotion=-1; } }
         updateImpactFeedback(dt);
         if(audioBank) {
             audioBank->update(dt);
@@ -375,12 +505,13 @@ struct App {
             if(IsKeyPressed(KEY_FOUR)) speed=8;
             if(IsKeyPressed(KEY_FIVE)) speed=16;
         }
+        updateDungeonTransition(dt);
         if(hitStop>0) {
             hitStop=std::max(0.0f,hitStop-dt);
             if(sim && sim->finished) settle();
             return;
         }
-        if(live() && !paused && !catalogOpen && !rulesOpen && simulationView) {
+        if(live() && !paused && !catalogOpen && !rulesOpen && simulationView && dungeonTransition<=0) {
             if(countdown.active()) {
                 int previous=countdown.number(); countdown.advance(dt);
                 if(countdown.number()!=previous && audioBank) audioBank->play(countdown.number()==0?Cue::Fight:Cue::Tick);
@@ -448,7 +579,16 @@ struct App {
         DrawCircle(static_cast<int>(statusX),static_cast<int>(ArenaFrame.y+25),3,!sim?Muted:sim->finished?Accent:Coral);
         text(status,statusX+12,ArenaFrame.y+17,11,!sim?Muted:sim->finished?Accent:Coral);
         BeginScissorMode(static_cast<int>(ArenaViewport.x),static_cast<int>(ArenaViewport.y),static_cast<int>(ArenaViewport.width),static_cast<int>(ArenaViewport.height));
-        Camera2D arenaCamera{{720,427},{720,427},screenTilt,ArenaZoom*(std::abs(screenTilt)>0.01f?1.025f:1.0f)};
+        Vec dungeonSlide{};
+        if(dungeonActive && dungeonTransition>0) {
+            float progress=std::clamp(dungeonTransition/1.1f,0.0f,1.0f);
+            float phase=1-std::abs(progress*2-1),distance=170*phase;
+            if(dungeonTransitionDirection=="EAST") dungeonSlide.x=distance;
+            else if(dungeonTransitionDirection=="WEST") dungeonSlide.x=-distance;
+            else if(dungeonTransitionDirection=="NORTH") dungeonSlide.y=-distance;
+            else if(dungeonTransitionDirection=="SOUTH") dungeonSlide.y=distance;
+        }
+        Camera2D arenaCamera{{720,427},{720+dungeonSlide.x,427+dungeonSlide.y},screenTilt,ArenaZoom*(std::abs(screenTilt)>0.01f?1.025f:1.0f)};
         BeginMode2D(arenaCamera);
         auto drawStunStar=[](Vector2 center,float radius,Color color) {
             DrawLineEx({center.x-radius,center.y},{center.x+radius,center.y},2.4f,color);
@@ -700,10 +840,21 @@ struct App {
             }
             DrawCircleV(p,f.radius+7,Fade(c,0.09f));
             DrawCircleV({p.x+2,p.y+5},f.radius,Color{4,8,14,200});
-            Color body=f.actorKind=="wild_dog"?Color{145,91,48,255}:f.actorKind=="dummy"?Color{137,120,96,255}:f.actorKind=="boss"?Color{255,174,62,255}:c;
+            bool skeleton=f.actorKind=="skeleton" || f.actorKind=="skeleton_boss";
+            Color body=skeleton?Color{205,210,205,255}:f.actorKind=="dire_wolf"?Color{92,61,41,255}:f.actorKind=="wild_dog"?Color{145,91,48,255}:f.actorKind=="goblin"?Color{80,184,97,255}:f.actorKind=="treasure_chest"?Color{151,91,38,255}:f.actorKind=="dummy"?Color{137,120,96,255}:f.actorKind=="boss"?Color{255,174,62,255}:c;
             DrawCircleV(p,f.radius,f.flash>0?White:Fade(body,f.invulnerable>0?0.4f:1));
-            if(f.actorKind=="boss") { DrawCircleLinesV(p,f.radius+5,Accent); DrawCircleLinesV(p,f.radius+9,Fade(Coral,0.7f)); }
-            drawFace(p,f.radius,fighterLook,realClock,{aim.x,aim.y},f.flash,sim && sim->finished && sim->winner!=f.team);
+            if(f.actorKind=="boss" || f.actorKind=="skeleton_boss") { DrawCircleLinesV(p,f.radius+5,Accent); DrawCircleLinesV(p,f.radius+9,Fade(Coral,0.7f)); }
+            if(f.actorKind=="treasure_chest") {
+                DrawRectangleRounded({p.x-f.radius*0.8f,p.y-f.radius*0.45f,f.radius*1.6f,f.radius*1.05f},0.12f,6,body);
+                DrawRectangleRec({p.x-f.radius*0.8f,p.y-f.radius*0.15f,f.radius*1.6f,3},Accent); DrawCircleV({p.x,p.y+2},3,Accent);
+            } else {
+                drawFace(p,f.radius,fighterLook,realClock,{aim.x,aim.y},f.flash,sim && sim->finished && sim->winner!=f.team);
+                if(skeleton) { DrawCircleV({p.x-6,p.y-2},3,Background); DrawCircleV({p.x+6,p.y-2},3,Background); DrawLineEx({p.x-7,p.y+8},{p.x+7,p.y+8},2,Background); }
+                if(f.actorKind=="goblin") {
+                    DrawTriangle({p.x-f.radius*0.9f,p.y-f.radius*0.2f},{p.x-f.radius*0.35f,p.y-f.radius*0.8f},{p.x-f.radius*0.15f,p.y+f.radius*0.15f},body);
+                    DrawTriangle({p.x+f.radius*0.9f,p.y-f.radius*0.2f},{p.x+f.radius*0.35f,p.y-f.radius*0.8f},{p.x+f.radius*0.15f,p.y+f.radius*0.15f},body);
+                }
+            }
             if(f.actorKind=="fighter") drawHat(p,f.radius,fighterLook,realClock);
             if(sim && f.stunTime>0) {
                 float bob=std::sin(sim->time*10)*2;
@@ -718,6 +869,9 @@ struct App {
             if(f.invulnerable>0) DrawCircleLinesV(p,f.radius+15,White);
             if(f.slowTime>0) { DrawCircleLinesV(p,f.radius+13,Color{255,202,82,255}); DrawCircleV({p.x-f.radius*0.75f,p.y-f.radius*0.8f},3,Color{255,202,82,255}); }
             if(f.poisonDps>0) { DrawCircleLinesV(p,f.radius+18,Color{118,226,106,255}); DrawCircleV({p.x+f.radius*0.55f,p.y-f.radius*0.8f},3,Color{118,226,106,255}); }
+            if(f.potionRegenTime>0) DrawRingLines(p,f.radius+20,f.radius+22,-90,-90+360*std::clamp(f.potionRegenTime/10.0f,0.0f,1.0f),40,Color{103,230,125,220});
+            if(f.potionArmorTime>0) DrawCircleLinesV(p,f.radius+25,Color{90,174,255,210});
+            if(f.potionDamageTime>0) DrawCircleLinesV(p,f.radius+29,Color{255,112,98,210});
             if(sim) {
                 float healthY=p.y-f.radius*(fighterLook.hat?2.2f:1.0f)-11;
                 DrawRectangleRec({p.x-22,healthY,44,4},Border);
@@ -775,7 +929,7 @@ struct App {
             centered("READ THE MATCH. MAKE YOUR PICK.",720,588,13,Muted);
             centered("Every loadout has an edge.",720,610,12,Color{86,105,127,255});
         }
-        if(sim && sim->finished) {
+        if(sim && sim->finished && (!dungeonActive || dungeonFinished)) {
             float enter=1-std::pow(1-std::min(1.0f,resultAge/0.45f),3),offset=(1-enter)*35;
             Color c=sim->winner<0?Accent:sim->match.challenge?(sim->winner==0?PlayerGreen:Coral):Team[sim->winner];
             for(int n=0;n<40 && resultAge<2.4f;++n) {
@@ -784,9 +938,9 @@ struct App {
                 DrawRectanglePro({x,y,5,9},{2,4},n*17+resultAge*140,Fade(n%3?c:Accent,std::max(0.0f,1-resultAge/2.4f)));
             }
             box({459,347+offset,522,159},Fade(Background,0.95f*enter),Fade(c,enter),0.08f);
-            std::string outcome=sim->match.challenge?(sim->winner==0?"CHALLENGE COMPLETE":"CHALLENGE FAILED"):sim->winner<0?"DRAW":sim->match.fighters[sim->winner].name+" WINS!";
+            std::string outcome=dungeonActive?(sim->winner==0?"DUNGEON CLEARED":"PARTY DEFEATED"):sim->match.challenge?(sim->winner==0?"CHALLENGE COMPLETE":"CHALLENGE FAILED"):sim->winner<0?"DRAW":sim->match.fighters[sim->winner].name+" WINS!";
             centered(outcome,720,367+offset,34+8*(1-enter),Fade(c,enter));
-            std::string resultDetail=sim->match.challenge?(sim->winner==0?"The next branches are now available.":"Adjust your squad and try again."):sim->winner<0?"Your stake has been refunded.":sim->winner==selected?"Good call. +"+std::to_string(returned-wallet.stake)+" coins":"The arena takes this one. -"+std::to_string(wallet.stake)+" coins";
+            std::string resultDetail=dungeonActive?(sim->winner==0?"The Bone Warden has fallen.":"The surviving path ends here."):sim->match.challenge?(sim->winner==0?"The next branches are now available.":"Adjust your squad and try again."):sim->winner<0?"Your stake has been refunded.":sim->winner==selected?"Good call. +"+std::to_string(returned-wallet.stake)+" coins":"The arena takes this one. -"+std::to_string(wallet.stake)+" coins";
             centered(resultDetail,720,425+offset,17,Fade(White,enter));
             float playerDamage=0,enemyDamage=0; for(const auto& fighter:sim->match.fighters) (fighter.team==0?playerDamage:enemyDamage)+=fighter.damageDealt;
             centered("Damage dealt: "+number(playerDamage)+"  /  "+number(enemyDamage),720,468+offset,12,Fade(Muted,enter));
@@ -965,20 +1119,134 @@ struct App {
         challengeMapZoom=std::clamp(std::min(availableWidth/std::max(1.0f,maxX-minX),availableHeight/std::max(1.0f,maxY-minY)),0.25f,1.35f);
         challengeMapViewReady=true;
     }
+    void dungeonBattleScreen() {
+        if(!sim) { leaveChallenge(); return; }
+        const auto* room=findDungeonRoom(dungeonRoomId);
+        if(!room) { leaveChallenge(); return; }
+        auto roster=[&](int team,float x,const std::string& title,Color color) {
+            box({x,96,210,700},Panel,Border,0.04f); DrawRectangleRounded({x+1,97,208,4},0.5f,6,color);
+            text(title,x+16,114,11,color); int row=0;
+            for(size_t index=0;index<sim->match.fighters.size();++index) {
+                auto& fighter=sim->match.fighters[index]; if(fighter.team!=team || fighter.hidden) continue;
+                float y=151+row*120.0f; Rectangle card{x+10,y,190,105};
+                bool potionTarget=team==0 && dungeonDraggedPotion>=0 && fighter.hp>0;
+                Color body=(fighter.actorKind=="skeleton"||fighter.actorKind=="skeleton_boss")?Color{205,210,205,255}:fighter.actorKind=="wild_dog"?Color{145,91,48,255}:fighter.actorKind=="treasure_chest"?Color{178,111,42,255}:fighter.actorKind=="boss"?Color{255,174,62,255}:color;
+                box(card,potionTarget&&inside(card)?Fade(PlayerGreen,0.28f):PanelAlt,potionTarget?PlayerGreen:Border,0.04f);
+                if(fighter.actorKind=="skeleton" || fighter.actorKind=="skeleton_boss") drawSkeletonPortrait({x+37,y+36},18,fighter.actorKind=="skeleton_boss");
+                else drawPortrait({x+37,y+36},18,body,appearanceFor(fighter.appearanceSeed,0),realClock,sim->finished&&dungeonFinished&&sim->winner!=team);
+                fitted(fighter.name+" "+fighter.title,x+64,y+10,124,12,White);
+                std::string type=fighter.actorKind=="skeleton"?"SKELETON":fighter.actorKind=="skeleton_boss"?"BOSS":fighter.actorKind=="wild_dog"?"BEAST":fighter.actorKind=="treasure_chest"?"TREASURE":"PARTY";
+                text(type,x+64,y+37,8,body);
+                float health=std::clamp(fighter.hp/fighter.maxHp,0.0f,1.0f);
+                DrawRectangleRec({x+22,y+67,166,5},Border); if(health>0) DrawRectangleRec({x+22,y+67,166*health,5},body);
+                text(number(fighter.hp)+" / "+number(fighter.maxHp)+" HP",x+22,y+78,9,Muted);
+                std::string buffs;
+                if(fighter.potionRegenTime>0) buffs+="REGEN "+number(fighter.potionRegenTime)+"s ";
+                if(fighter.potionArmorTime>0) buffs+="ARMOR "+number(fighter.potionArmorTime)+"s ";
+                if(fighter.potionDamageTime>0) buffs+="POWER "+number(fighter.potionDamageTime)+"s";
+                if(!buffs.empty()) fitted(buffs,x+22,y+94,166,7,Accent);
+                offerBallPopover(fighter,card,body); ++row;
+            }
+            if(team==1 && sim->match.mouseInvasion.enabled) {
+                int active=static_cast<int>(std::ranges::count_if(sim->mice,[](const SummonedMouse& mouse){return mouse.targetable&&mouse.hp>0;}));
+                float y=151+row*120.0f; box({x+10,y,190,105},PanelAlt,Border,0.04f);
+                DrawCircleV({x+37,y+36},18,Color{207,178,176,255}); centered("M",x+37,y+25,13,Background);
+                fitted("VERMIN FLOOD",x+64,y+12,124,12,White); text(std::to_string(active)+" / 30 ACTIVE",x+64,y+39,8,Coral);
+                fitted("Survive for one minute",x+22,y+80,166,9,Muted);
+            }
+        };
+        roster(0,28,"DUNGEON PARTY",PlayerGreen); roster(1,1202,"ROOM THREATS",Coral);
+        arena(); controls();
+
+        auto doorRect=[](const std::string& direction) {
+            if(direction=="NORTH") return Rectangle{675,126,90,20};
+            if(direction=="SOUTH") return Rectangle{675,712,90,20};
+            if(direction=="WEST") return Rectangle{257,384,20,86};
+            return Rectangle{1163,384,20,86};
+        };
+        for(const auto& exit:room->exits) {
+            Rectangle door=doorRect(exit.direction);
+            bool ready=dungeonWaitingForDoor&&!dungeonFinished&&dungeonTransition<=0;
+            Color color=ready?Accent:Coral; bool hover=ready&&!inputBlocked&&inside(door);
+            DrawRectangleRounded(door,0.12f,5,hover?Fade(color,0.75f):color); DrawRectangleRoundedLinesEx(door,0.12f,5,2,White);
+            Vector2 arrowFrom{door.x+door.width/2,door.y+door.height/2},arrowTo=arrowFrom;
+            if(exit.direction=="NORTH") arrowTo.y-=7;
+            else if(exit.direction=="SOUTH") arrowTo.y+=7;
+            else if(exit.direction=="WEST") arrowTo.x-=7;
+            else arrowTo.x+=7;
+            DrawLineEx(arrowFrom,arrowTo,2,Background);
+            if(hover) { SetMouseCursor(MOUSE_CURSOR_POINTING_HAND); if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) beginDungeonTransition(exit.destination); }
+        }
+
+        box({28,810,1384,82},Panel,Border,0.08f);
+        text("DUNGEON  /  "+room->name,51,819,10,Coral);
+        std::string state=dungeonFinished?(sim->winner==0?"BONE WARDEN DEFEATED":"PARTY WIPED"):dungeonWaitingForDoor?(dungeonRewardMessage.empty()?"CHOOSE A DOOR":dungeonRewardMessage):room->encounter.objectiveType=="survive"?"SURVIVE THE FLOOD":"CLEAR THE ROOM";
+        fitted(state,51,840,430,18,dungeonFinished?(sim->winner==0?PlayerGreen:Coral):dungeonWaitingForDoor?Accent:White);
+        text(std::to_string(dungeonParty.size())+" / 3 BALLS REMAIN",51,868,9,Muted);
+        static const std::array<const char*,3> potionNames={"REGEN 10s","ARMOR 60s","ATTACK 60s"};
+        static const std::array<Color,3> potionColors={Color{103,230,125,255},Color{90,174,255,255},Color{255,112,98,255}};
+        for(int potion=0;potion<3;++potion) {
+            Rectangle slot{490+potion*147.0f,827,137,46}; bool available=dungeonPotions[potion]>0&&!dungeonFinished&&dungeonTransition<=0;
+            box(slot,dungeonDraggedPotion==potion?Fade(potionColors[potion],0.25f):PanelAlt,available?potionColors[potion]:Border,0.12f);
+            DrawCircleV({slot.x+19,slot.y+23},9,available?potionColors[potion]:Muted); DrawRectangleRec({slot.x+15,slot.y+8,8,7},available?White:Muted);
+            fitted(potionNames[potion],slot.x+35,slot.y+8,78,9,available?White:Muted); text("x"+std::to_string(dungeonPotions[potion]),slot.x+108,slot.y+25,9,available?potionColors[potion]:Muted);
+            if(available&&!inputBlocked&&inside(slot)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) dungeonDraggedPotion=potion;
+        }
+        if(dungeonLootFlight>=0 && dungeonLootPotion>=0 && dungeonLootPotion<3) {
+            float progress=std::clamp(dungeonLootFlight/0.9f,0.0f,1.0f),ease=progress*progress*(3-2*progress);
+            Vector2 from{720,427},to{509+dungeonLootPotion*147.0f,850};
+            Vector2 potionAt{from.x+(to.x-from.x)*ease,from.y+(to.y-from.y)*ease-78*std::sin(progress*Pi)};
+            DrawCircleV(potionAt,14,Fade(potionColors[dungeonLootPotion],0.20f));
+            DrawLineEx(from,potionAt,2,Fade(potionColors[dungeonLootPotion],0.34f*(1-progress)));
+            DrawCircleV(potionAt,9,potionColors[dungeonLootPotion]); DrawRectangleRec({potionAt.x-4,potionAt.y-13,8,6},White);
+            DrawCircleLinesV(potionAt,12,White);
+            DrawCircleLinesV(to,17,Fade(potionColors[dungeonLootPotion],1-progress));
+        }
+        text("Drag a potion onto a ball",490,878,8,Muted);
+        if(dungeonFinished) {
+            if(button({1102,825,286,51},"RETURN TO MAP  ->",true,true,Accent,13)) { leaveChallenge(); return; }
+        } else if(button({1102,825,286,51},"ABANDON DUNGEON",false,true,Coral,11)) { leaveChallenge(); return; }
+
+        if(dungeonDraggedPotion>=0) {
+            // A frosted focus layer keeps the party list readable while the player aims a potion drop.
+            Color frost=Fade(Background,0.57f);
+            DrawRectangle(0,78,Width,18,frost);
+            DrawRectangle(0,96,28,700,frost);
+            DrawRectangle(238,96,Width-238,700,frost);
+            DrawRectangle(0,796,Width,Height-796,frost);
+            for(int y=108;y<790;y+=18) DrawLineEx({238.0f,static_cast<float>(y)},{static_cast<float>(Width),static_cast<float>(y)},1,Color{160,180,205,10});
+            SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+            DrawCircleV(mouse,16,potionColors[dungeonDraggedPotion]); DrawCircleLinesV(mouse,19,White);
+            if(IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                int row=0;
+                for(auto& fighter:sim->match.fighters) if(fighter.team==0&&!fighter.hidden) {
+                    Rectangle card{38,151+row*120.0f,190,105};
+                    if(inside(card)&&fighter.hp>0) { applyDungeonPotion(dungeonDraggedPotion,fighter); break; }
+                    ++row;
+                }
+                dungeonDraggedPotion=-1;
+            }
+        }
+        if(dungeonTransition>0) {
+            float phase=dungeonTransition/1.1f,alpha=1-std::abs(phase*2-1);
+            DrawRectangleRec(ArenaFrame,Fade(BLACK,std::clamp(alpha,0.0f,1.0f)));
+        }
+    }
     void challengeBattleScreen() {
+        if(dungeonActive) { dungeonBattleScreen(); return; }
         const ChallengeDefinition* challenge=challenges.find(activeChallengeId);
         if(!challenge || !sim) { leaveChallenge(); return; }
-        std::string objective=challenge->objectiveType=="deal_damage"?"DEAL "+number(challenge->objectiveTarget)+" DAMAGE":challenge->objectiveType=="survive"?"SURVIVE FOR "+number(challenge->timeLimit)+" SECONDS":"DEFEAT EVERY ENEMY";
+        std::string objective=challenge->objectiveType=="deal_damage"?"DEAL "+number(challenge->objectiveTarget)+" DAMAGE":challenge->objectiveType=="survive"?"SURVIVE FOR "+number(challenge->timeLimit)+" SECONDS":challenge->objectiveType=="clear_targets"?"CLEAR "+number(challenge->objectiveTarget)+" TARGETS":"DEFEAT EVERY ENEMY";
         auto roster=[&](int team,float x,const std::string& title,Color color) {
             box({x,96,210,700},Panel,Border,0.04f); DrawRectangleRounded({x+1,97,208,4},0.5f,6,color);
             text(title,x+16,114,11,color); int row=0;
             for(size_t index=0;index<sim->match.fighters.size();++index) {
                 const auto& fighter=sim->match.fighters[index]; if(fighter.team!=team || fighter.hidden) continue;
-                float y=151+row*120.0f; Color body=fighter.actorKind=="wild_dog"?Color{145,91,48,255}:fighter.actorKind=="dummy"?Color{137,120,96,255}:fighter.actorKind=="boss"?Color{255,174,62,255}:color;
+                float y=151+row*120.0f; Color body=fighter.actorKind=="dire_wolf"?Color{92,61,41,255}:fighter.actorKind=="wild_dog"?Color{145,91,48,255}:fighter.actorKind=="goblin"?Color{80,184,97,255}:fighter.actorKind=="dummy"?Color{137,120,96,255}:fighter.actorKind=="boss"?Color{255,174,62,255}:color;
                 Rectangle rosterCard{x+10,y,190,105}; box(rosterCard,PanelAlt,Border,0.04f);
                 drawPortrait({x+37,y+36},18,body,appearanceFor(fighter.appearanceSeed,0),realClock,sim->finished&&sim->winner!=team);
                 fitted(fighter.name+" "+fighter.title,x+64,y+12,124,13,White);
-                text(fighter.actorKind=="wild_dog"?"BEAST":fighter.actorKind=="dummy"?"TARGET":fighter.actorKind=="boss"?"BOSS":std::to_string(fighter.points)+" PTS",x+64,y+39,9,body);
+                text((fighter.actorKind=="wild_dog"||fighter.actorKind=="dire_wolf"||fighter.actorKind=="goblin")?"BEAST":(fighter.actorKind=="dummy"||fighter.actorKind=="wave_target")?"TARGET":fighter.actorKind=="boss"?"BOSS":std::to_string(fighter.points)+" PTS",x+64,y+39,9,body);
                 float health=std::clamp(fighter.hp/fighter.maxHp,0.0f,1.0f);
                 DrawRectangleRec({x+22,y+71,166,5},Border); DrawRectangleRec({x+22,y+71,166*health,5},body);
                 text(number(fighter.hp)+" / "+number(fighter.maxHp)+" HP",x+22,y+82,10,Muted); offerBallPopover(fighter,rosterCard,body); ++row;
@@ -1001,6 +1269,11 @@ struct App {
             float progress=std::clamp(playerDamage/challenge->objectiveTarget,0.0f,1.0f);
             DrawRectangleRounded({51,871,610,7},1,8,Border); if(progress>0) DrawRectangleRounded({51,871,610*progress,7},1,8,PlayerGreen);
             text(number(playerDamage)+" / "+number(challenge->objectiveTarget),674,863,11,PlayerGreen);
+        } else if(challenge->objectiveType=="clear_targets") {
+            int defeated=sim->finished && sim->winner==0?sim->targetWaveTotal:sim->activeTargetWave;
+            float progress=sim->targetWaveTotal>0?std::clamp(static_cast<float>(defeated)/sim->targetWaveTotal,0.0f,1.0f):0;
+            DrawRectangleRounded({51,871,610,7},1,8,Border); if(progress>0) DrawRectangleRounded({51,871,610*progress,7},1,8,PlayerGreen);
+            text(std::to_string(std::min(defeated,sim->targetWaveTotal))+" / "+std::to_string(sim->targetWaveTotal)+" TARGETS",674,863,11,PlayerGreen);
         } else text(challenge->objectiveType=="survive"?"Stay alive until the timer reaches zero.":"Win before the timer reaches zero.",51,869,10,Muted);
         text("TIME LEFT",853,820,10,Muted);
         text(number(std::max(0.0f,sim->rules.limit-sim->time),1)+" s",853,842,21,Accent);
@@ -1105,10 +1378,10 @@ struct App {
         fitted("PATH  ·  "+selectedDefinition.branch,1190,181,196,10,selectedColor);
         wrapped(selectedDefinition.description,1020,211,365,13,White,4);
         DrawLineEx({1020,282},{1386,282},1,Border);
-        const std::array<std::pair<std::string,std::string>,4> facts={{{"SQUAD",std::to_string(selectedDefinition.requiredBalls)+" owned ball"+(selectedDefinition.requiredBalls==1?"":"s")},{"ENCOUNTER",selectedDefinition.encounterType},{"ARENA",selectedDefinition.arenaId.substr(6)},{"LIMIT",number(selectedDefinition.timeLimit)+" s"}}};
+        const std::array<std::pair<std::string,std::string>,4> facts={{{"SQUAD",std::to_string(selectedDefinition.requiredBalls)+" owned ball"+(selectedDefinition.requiredBalls==1?"":"s")},{"ENCOUNTER",selectedDefinition.id=="challenge.first_dungeon"?"branching dungeon":selectedDefinition.encounterType},{"ARENA",selectedDefinition.id=="challenge.first_dungeon"?"multiple rooms":selectedDefinition.arenaId.substr(6)},{"LIMIT",selectedDefinition.id=="challenge.first_dungeon"?"persistent run":number(selectedDefinition.timeLimit)+" s"}}};
         for(int n=0;n<4;++n) { float x=1020+(n%2)*184.0f,y=302+(n/2)*54.0f; text(facts[n].first,x,y,9,Muted); fitted(facts[n].second,x,y+18,170,14,White); }
         text("OBJECTIVE",1020,417,9,Muted);
-        std::string objective=selectedDefinition.objectiveType;
+        std::string objective=selectedDefinition.objectiveType=="clear_targets"?"clear targets":selectedDefinition.objectiveType;
         std::replace(objective.begin(),objective.end(),'_',' ');
         if(selectedDefinition.objectiveTarget>0) objective+="  /  "+number(selectedDefinition.objectiveTarget);
         fitted(objective,1020,436,365,15,selectedColor);
@@ -1130,7 +1403,7 @@ struct App {
         for(size_t index=0;index<visibleEnemies;++index) {
             const ChallengeActor& actor=*enemyActors[index]; const Fighter& enemy=challengeEnemyPreview[index]; bool randomEnemy=actor.kind=="generated_fighter";
             float x=1020+index*(enemyCardWidth+10),y=481; Rectangle card{x,y,enemyCardWidth,68};
-            Color body=enemy.actorKind=="wild_dog"?Color{145,91,48,255}:enemy.actorKind=="dummy"?Color{137,120,96,255}:enemy.actorKind=="boss"?Color{255,174,62,255}:Coral;
+            Color body=(enemy.actorKind=="skeleton"||enemy.actorKind=="skeleton_boss")?Color{205,210,205,255}:enemy.actorKind=="dire_wolf"?Color{92,61,41,255}:enemy.actorKind=="wild_dog"?Color{145,91,48,255}:enemy.actorKind=="goblin"?Color{80,184,97,255}:enemy.actorKind=="dummy"?Color{137,120,96,255}:enemy.actorKind=="boss"?Color{255,174,62,255}:Coral;
             bool hover=!randomEnemy&&!inputBlocked&&inside(card); box(card,hover?Fade(body,0.13f):PanelAlt,hover?body:Border,0.08f);
             if(randomEnemy) {
                 DrawCircleV({x+29,y+34},19,Fade(Coral,0.75f)); DrawCircleLines(static_cast<int>(x+29),static_cast<int>(y+34),19,White); centered("?",x+29,y+23,18,White);
@@ -1138,8 +1411,9 @@ struct App {
                 text(actor.maxPoints>0?"UP TO "+std::to_string(actor.maxPoints)+" PTS":"RANDOM POINTS",x+57,y+29,9,Coral);
                 fitted("ROLLED WHEN FIGHT STARTS",x+57,y+47,enemyCardWidth-65,8,Muted);
             } else {
-                if(enemy.actorKind=="boss") DrawCircleLines(static_cast<int>(x+29),static_cast<int>(y+34),22,Accent);
-                drawPortrait({x+29,y+34},17,body,appearanceFor(enemy.appearanceSeed,0),realClock);
+                if(enemy.actorKind=="boss" || enemy.actorKind=="skeleton_boss") DrawCircleLines(static_cast<int>(x+29),static_cast<int>(y+34),22,Accent);
+                if(enemy.actorKind=="skeleton" || enemy.actorKind=="skeleton_boss") drawSkeletonPortrait({x+29,y+34},17,enemy.actorKind=="skeleton_boss");
+                else drawPortrait({x+29,y+34},17,body,appearanceFor(enemy.appearanceSeed,0),realClock);
                 fitted(enemy.name,x+57,y+8,enemyCardWidth-65,11,White);
                 fitted(std::to_string(enemy.points)+" PTS  ·  "+number(enemy.maxHp)+" HP",x+57,y+28,enemyCardWidth-65,9,body);
                 text("VIEW FULL INFO",x+57,y+47,8,hover?White:Muted);
@@ -1195,7 +1469,8 @@ struct App {
         Color color=inspectionColor; Appearance look=appearanceFor(inspectionSeed,0);
         box({237,170,280,314},PanelAlt,Border,0.05f);
         if(inspectedBall.actorKind=="boss") { DrawCircleLines(377,293,68,Accent); DrawCircleLines(377,293,73,Fade(Coral,0.7f)); }
-        drawPortrait({377,293},58,color,look,realClock);
+        if(inspectedBall.actorKind=="skeleton" || inspectedBall.actorKind=="skeleton_boss") drawSkeletonPortrait({377,293},58,inspectedBall.actorKind=="skeleton_boss");
+        else drawPortrait({377,293},58,color,look,realClock);
         centered(inspectedBall.name+" "+inspectedBall.title,377,389,19,White);
         centered(std::to_string(inspectedBall.points)+" BALANCE PTS",377,426,12,color);
         text("HP",257,456,9,Muted); text(number(inspectedBall.maxHp),292,450,15);
@@ -1228,7 +1503,8 @@ struct App {
                 else pendingRemove=inspectionOwned;
             }
         } else if(inspectionChallengeEnemy) {
-            std::string kind=inspectedBall.actorKind=="boss"?"BOSS":inspectedBall.actorKind=="wild_dog"?"BEAST":inspectedBall.actorKind=="dummy"?"DUMMY":"FIXED OPPONENT";
+            bool beast=inspectedBall.actorKind=="wild_dog" || inspectedBall.actorKind=="dire_wolf" || inspectedBall.actorKind=="skeleton" || inspectedBall.actorKind=="goblin";
+            std::string kind=(inspectedBall.actorKind=="boss" || inspectedBall.actorKind=="skeleton_boss")?"BOSS":beast?"BEAST":inspectedBall.actorKind=="dummy"?"DUMMY":"FIXED OPPONENT";
             text(kind,237,536,10,color);
             text("DAMAGE",237,566,9,Muted); text(number(inspectedBall.damageMultiplier,2)+"x",299,560,15,White);
             text("CONTACT",364,566,9,Muted); text(number(std::max(0.0f,inspectedBall.contactDamage)),432,560,15,White);
@@ -1449,7 +1725,7 @@ int main(int argc,char** argv) {
             audioBank->setMuted(false); SetMasterVolume(0); audioBank->play(Cue::Fight);
             verify(audioBank->isPlaying(Cue::Fight),"Audio backend did not start playback"); audioBank->setMuted(true);
         }
-        const char* smokeFiles[]={"preview.png","countdown-3.png","countdown-2.png","countdown-1.png","fight.png","live.png","result.png","catalog.png","styles.png","rules.png","collection.png","ball-inspection.png","challenges.png","challenge-boss.png","challenge-enemy-inspection.png","challenge-countdown.png","challenge-live.png","challenge-result.png"};
+        const char* smokeFiles[]={"preview.png","countdown-3.png","countdown-2.png","countdown-1.png","fight.png","live.png","result.png","catalog.png","styles.png","rules.png","collection.png","ball-inspection.png","challenges.png","challenge-boss.png","challenge-enemy-inspection.png","challenge-countdown.png","challenge-live.png","challenge-result.png","dungeon-entrance.png","dungeon-transition.png","dungeon-room.png","dungeon-live.png"};
         while(!WindowShouldClose()) {
             float scale=std::min(GetScreenWidth()/static_cast<float>(Width),GetScreenHeight()/static_cast<float>(Height));
             float ox=(GetScreenWidth()-Width*scale)/2,oy=(GetScreenHeight()-Height*scale)/2;
@@ -1523,6 +1799,19 @@ int main(int argc,char** argv) {
                     verify(app.sim->finished && app.sim->winner==0 && app.wallet.challengeCompleted("challenge.first_spark"),"Challenge victory was not completed and saved");
                     app.resultAge=0.55f;
                 }
+                if(frame==18) {
+                    app.leaveChallenge();
+                    app.wallet.ownedBallSeeds.push_back(202); app.wallet.ownedBallMarketGenerated.push_back(false);
+                    app.wallet.ownedBallSeeds.push_back(303); app.wallet.ownedBallMarketGenerated.push_back(false);
+                    app.rebuildCollectionCache(); app.wallet.completeChallenge("challenge.first_spark");
+                    const auto* dungeon=app.challenges.find("challenge.first_dungeon"); verify(dungeon,"Dungeon challenge is missing");
+                    if(!app.wallet.challengeUnlocked(dungeon->id)) verify(app.wallet.unlockChallenge(*dungeon),"Dungeon challenge could not be unlocked");
+                    app.challengeSquadSeeds={app.wallet.ownedBallSeeds[0],app.wallet.ownedBallSeeds[1],app.wallet.ownedBallSeeds[2]};
+                    app.startChallenge(*dungeon); verify(app.dungeonActive&&app.dungeonWaitingForDoor&&app.dungeonParty.size()==3,"Dungeon entrance did not start");
+                }
+                if(frame==19) { app.beginDungeonTransition("monsters"); for(int n=0;n<6;++n) app.update(0.1f); verify(app.dungeonRoomId=="monsters","Dungeon door did not enter the monster room"); }
+                if(frame==20) { for(int n=0;n<6;++n) app.update(0.1f); verify(app.dungeonTransition==0&&app.countdown.active(),"Dungeon transition did not finish into a paused countdown"); }
+                if(frame==21) { for(int n=0;n<240;++n) app.update(1.0f/60); verify(!app.countdown.active()&&app.sim&&app.sim->time>0,"Dungeon room combat did not start"); }
             } else app.update(GetFrameTime());
             BeginTextureMode(canvas); if(smoke && frame==8) styleSheet(); else app.draw(); EndTextureMode();
             if(smoke && (frame==10 || frame==12 || frame==13)) verify(app.ballPopoverActive,"Ball stats popover did not activate on hover");
@@ -1538,7 +1827,7 @@ int main(int argc,char** argv) {
                 if(!png || bytes<=0) throw std::runtime_error("Screenshot encoding failed");
                 std::ofstream output(file,std::ios::binary); output.write(reinterpret_cast<const char*>(png),bytes); MemFree(png);
                 if(!output.good()) throw std::runtime_error("Screenshot write failed");
-                if(++frame==18) { std::cout<<"Smoke render OK: 18 screens; betting, collection, draggable challenge map, enemy previews and playable challenge combat OK; audio device "<<(audioBank->ready?"ready":"unavailable")<<"; "<<root.string()<<"\n"; break; }
+                if(++frame==22) { std::cout<<"Smoke render OK: 22 screens; betting, collection, challenge map, combat and branching dungeon transition OK; audio device "<<(audioBank->ready?"ready":"unavailable")<<"; "<<root.string()<<"\n"; break; }
             }
         }
     } catch(const std::exception& e) {

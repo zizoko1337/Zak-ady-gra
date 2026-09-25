@@ -55,7 +55,7 @@
       "prerequisites": ["challenge.first_spark"],
       "unlock_cost": 1000,
       "required_balls": 1,
-      "map": {"x": 304, "y": -99},
+      "map": {"x": 277, "y": -160},
       "encounter": {
         "type": "beast_hunt",
         "arena_id": "arena.diamond",
@@ -77,7 +77,7 @@
       "prerequisites": ["challenge.first_spark"],
       "unlock_cost": 1000,
       "required_balls": 1,
-      "map": {"x": 188, "y": 259},
+      "map": {"x": 277, "y": 160},
       "encounter": {
         "type": "damage_race",
         "arena_id": "arena.circle",
@@ -99,7 +99,7 @@
       "prerequisites": ["challenge.first_spark"],
       "unlock_cost": 1000,
       "required_balls": 1,
-      "map": {"x": -188, "y": 259},
+      "map": {"x": 0, "y": 320},
       "encounter": {
         "type": "duel",
         "arena_id": "arena.octagon",
@@ -121,7 +121,7 @@
       "prerequisites": ["challenge.first_spark"],
       "unlock_cost": 1000,
       "required_balls": 3,
-      "map": {"x": -304, "y": -99},
+      "map": {"x": -277, "y": 160},
       "encounter": {
         "type": "boss",
         "arena_id": "arena.circle",
@@ -143,7 +143,7 @@
       "prerequisites": ["challenge.twinblade_titan"],
       "unlock_cost": 2000,
       "required_balls": 3,
-      "map": {"x": -590, "y": -300},
+      "map": {"x": -554, "y": 320},
       "encounter": {
         "type": "boss",
         "arena_id": "arena.diamond",
@@ -157,6 +157,72 @@
       }
     },
     {
+      "id": "challenge.boss_pufferfish",
+      "name": "Boss Pufferfish",
+      "description": "Deploy three owned balls against a 1000 HP Pufferfish with two Poison Darts, Spiked Skin, Spiked Rebounds and Slowpoke in a Spiked arena.",
+      "color": "yellow",
+      "branch": "BOSSES",
+      "prerequisites": ["challenge.ricochet_behemoth"],
+      "unlock_cost": 3000,
+      "required_balls": 3,
+      "map": {"x": -714, "y": 597},
+      "encounter": {
+        "type": "boss",
+        "arena_id": "arena.circle",
+        "arena_effect": "spiked_arena",
+        "time_limit": 180,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "boss_pufferfish", "display_name": "BOSS PUFFERFISH", "kind": "boss", "team": "enemy", "seed": 46003, "position": [100, 0], "hp_multiplier": 10, "size_multiplier": 1.55, "loadout": ["weapon.poison_dart", "weapon.poison_dart", "ability.spiked_skin", "ability.spikes", "stat.slow"]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.boss_immortale",
+      "name": "Boss Immortale",
+      "description": "Deploy three owned balls against a 1000 HP Immortale with two Orbit Shields, Regeneration and Dodge.",
+      "color": "yellow",
+      "branch": "BOSSES",
+      "prerequisites": ["challenge.ricochet_behemoth"],
+      "unlock_cost": 3000,
+      "required_balls": 3,
+      "map": {"x": -831, "y": 480},
+      "encounter": {
+        "type": "boss",
+        "arena_id": "arena.octagon",
+        "arena_effect": "",
+        "time_limit": 180,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "boss_immortale", "display_name": "BOSS IMMORTALE", "kind": "boss", "team": "enemy", "seed": 46004, "position": [100, 0], "hp_multiplier": 10, "size_multiplier": 1.55, "loadout": ["weapon.orbit_shield", "weapon.orbit_shield", "ability.regen", "ability.dodge"]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.boss_shredder",
+      "name": "Boss Shredder",
+      "description": "Deploy three owned balls against a 700 HP Shredder with two Orbit Daggers, Power Up, Combo Master, Speedy, Dash and Faster Swings.",
+      "color": "yellow",
+      "branch": "BOSSES",
+      "prerequisites": ["challenge.ricochet_behemoth"],
+      "unlock_cost": 3000,
+      "required_balls": 3,
+      "map": {"x": -874, "y": 320},
+      "encounter": {
+        "type": "boss",
+        "arena_id": "arena.diamond",
+        "arena_effect": "",
+        "time_limit": 180,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "boss_shredder", "display_name": "BOSS SHREDDER", "kind": "boss", "team": "enemy", "seed": 46005, "position": [100, 0], "hp_multiplier": 7, "size_multiplier": 1.35, "loadout": ["weapon.dagger", "weapon.dagger", "stat.power", "stat.combo_master", "stat.fast", "ability.dash", "stat.fast_swings"]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
       "id": "challenge.mouse_invasion",
       "name": "Mouse Invasion",
       "description": "Survive for 60 seconds while the arena spawns one targetable hostile mouse every second, up to 20 active mice.",
@@ -165,7 +231,7 @@
       "prerequisites": ["challenge.dps_check"],
       "unlock_cost": 2000,
       "required_balls": 1,
-      "map": {"x": 550, "y": 150},
+      "map": {"x": 586, "y": 243},
       "encounter": {
         "type": "survival",
         "arena_id": "arena.rectangle",
@@ -189,7 +255,7 @@
       "prerequisites": ["challenge.dps_check"],
       "unlock_cost": 2000,
       "required_balls": 1,
-      "map": {"x": 400, "y": 560},
+      "map": {"x": 503, "y": 386},
       "encounter": {
         "type": "damage_race",
         "arena_id": "arena.circle",
@@ -198,6 +264,303 @@
         "objective": {"type": "deal_damage", "target": 300},
         "actors": [
           {"id": "damage_dummy_300", "display_name": "DAMAGE DUMMY", "kind": "dummy", "team": "enemy", "seed": 44002, "position": [0, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.dps_check_500",
+      "name": "DPS Check: 500",
+      "description": "Deal 500 damage in 60 seconds to the stationary, harmless dummy at the centre of a circular arena.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.dps_check_300"],
+      "unlock_cost": 2500,
+      "required_balls": 1,
+      "map": {"x": 729, "y": 612},
+      "encounter": {
+        "type": "damage_race",
+        "arena_id": "arena.circle",
+        "arena_effect": "",
+        "time_limit": 60,
+        "objective": {"type": "deal_damage", "target": 500},
+        "actors": [
+          {"id": "damage_dummy_500", "display_name": "DAMAGE DUMMY", "kind": "dummy", "team": "enemy", "seed": 44003, "position": [0, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.dps_check_750",
+      "name": "DPS Check: 750",
+      "description": "Deal 750 damage in 60 seconds to the stationary, harmless dummy at the centre of a circular arena.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.dps_check_500"],
+      "unlock_cost": 3500,
+      "required_balls": 1,
+      "map": {"x": 1006, "y": 772},
+      "encounter": {
+        "type": "damage_race",
+        "arena_id": "arena.circle",
+        "arena_effect": "",
+        "time_limit": 60,
+        "objective": {"type": "deal_damage", "target": 750},
+        "actors": [
+          {"id": "damage_dummy_750", "display_name": "DAMAGE DUMMY", "kind": "dummy", "team": "enemy", "seed": 44004, "position": [0, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.dps_check_1000",
+      "name": "DPS Check: 1000",
+      "description": "Deal 1000 damage in 60 seconds to the stationary, harmless dummy at the centre of a circular arena.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.dps_check_750"],
+      "unlock_cost": 5000,
+      "required_balls": 1,
+      "map": {"x": 1283, "y": 932},
+      "encounter": {
+        "type": "damage_race",
+        "arena_id": "arena.circle",
+        "arena_effect": "",
+        "time_limit": 60,
+        "objective": {"type": "deal_damage", "target": 1000},
+        "actors": [
+          {"id": "damage_dummy_1000", "display_name": "DAMAGE DUMMY", "kind": "dummy", "team": "enemy", "seed": 44005, "position": [0, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.dps_check_1500",
+      "name": "DPS Check: 1500",
+      "description": "Deal 1500 damage in 60 seconds to the stationary, harmless dummy at the centre of a circular arena.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.dps_check_1000"],
+      "unlock_cost": 7500,
+      "required_balls": 1,
+      "map": {"x": 1560, "y": 1092},
+      "encounter": {
+        "type": "damage_race",
+        "arena_id": "arena.circle",
+        "arena_effect": "",
+        "time_limit": 60,
+        "objective": {"type": "deal_damage", "target": 1500},
+        "actors": [
+          {"id": "damage_dummy_1500", "display_name": "DAMAGE DUMMY", "kind": "dummy", "team": "enemy", "seed": 44006, "position": [0, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.mouse_stampede",
+      "name": "Mouse Stampede",
+      "description": "Survive for 60 seconds while two targetable hostile mice spawn every second, up to 50 active mice.",
+      "color": "purple",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.mouse_invasion"],
+      "unlock_cost": 3500,
+      "required_balls": 1,
+      "map": {"x": 895, "y": 326},
+      "encounter": {
+        "type": "survival",
+        "arena_id": "arena.rectangle",
+        "arena_effect": "",
+        "time_limit": 60,
+        "objective": {"type": "survive", "target": 60},
+        "actors": [
+          {"id": "mouse_invasion_controller", "display_name": "MOUSE STAMPEDE", "kind": "dummy", "team": "enemy", "seed": 47002, "position": [900, 900]}
+        ],
+        "arena_objects": [
+          {"type": "spawn_zone", "position": [0, 0], "params": {"mouse_invasion": 1, "interval": 0.5, "max_count": 50, "hp": 1, "radius": 7, "speed": 165, "damage": 5, "bite_cooldown": 2}}
+        ]
+      }
+    },
+    {
+      "id": "challenge.target_gauntlet",
+      "name": "Heavy Target Gauntlet",
+      "description": "Destroy 10 Slowpoke Big Ball targets with 1 HP in 45 seconds. One target appears at a time in a random arena position.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.dps_check_500"],
+      "unlock_cost": 4000,
+      "required_balls": 1,
+      "map": {"x": 889, "y": 889},
+      "encounter": {
+        "type": "survival",
+        "arena_id": "arena.rectangle",
+        "arena_effect": "",
+        "time_limit": 45,
+        "objective": {"type": "clear_targets", "target": 10},
+        "actors": [
+          {"id": "target_wave", "kind": "dummy", "team": "enemy", "count": 10, "seed": 49001, "position": [130, 0]}
+        ],
+        "arena_objects": [
+          {"type": "target_wave", "position": [0, 0], "params": {"targets_per_phase": 10, "phase_count": 1, "start_phase": 0}}
+        ]
+      }
+    },
+    {
+      "id": "challenge.target_gauntlet_standard",
+      "name": "Target Gauntlet",
+      "description": "Destroy 10 standard 1 HP targets in 45 seconds. One target appears at a time in a random arena position.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.target_gauntlet"],
+      "unlock_cost": 5000,
+      "required_balls": 1,
+      "map": {"x": 1049, "y": 1166},
+      "encounter": {
+        "type": "survival",
+        "arena_id": "arena.rectangle",
+        "arena_effect": "",
+        "time_limit": 45,
+        "objective": {"type": "clear_targets", "target": 10},
+        "actors": [
+          {"id": "target_wave", "kind": "dummy", "team": "enemy", "count": 10, "seed": 49002, "position": [130, 0]}
+        ],
+        "arena_objects": [
+          {"type": "target_wave", "position": [0, 0], "params": {"targets_per_phase": 10, "phase_count": 1, "start_phase": 1}}
+        ]
+      }
+    },
+    {
+      "id": "challenge.target_gauntlet_swift",
+      "name": "Swift Target Gauntlet",
+      "description": "Destroy 10 Small Speedy 1 HP targets in 45 seconds. One target appears at a time in a random arena position.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.target_gauntlet_standard"],
+      "unlock_cost": 6000,
+      "required_balls": 1,
+      "map": {"x": 1209, "y": 1443},
+      "encounter": {
+        "type": "survival",
+        "arena_id": "arena.rectangle",
+        "arena_effect": "",
+        "time_limit": 45,
+        "objective": {"type": "clear_targets", "target": 10},
+        "actors": [
+          {"id": "target_wave", "kind": "dummy", "team": "enemy", "count": 10, "seed": 49003, "position": [130, 0]}
+        ],
+        "arena_objects": [
+          {"type": "target_wave", "position": [0, 0], "params": {"targets_per_phase": 10, "phase_count": 1, "start_phase": 2}}
+        ]
+      }
+    },
+    {
+      "id": "challenge.target_gauntlet_elusive",
+      "name": "Elusive Target Gauntlet",
+      "description": "Destroy 10 Small Speedy 1 HP targets with Dodge and Lucky in 45 seconds. One target appears at a time in a random arena position.",
+      "color": "cyan",
+      "branch": "TRIALS",
+      "prerequisites": ["challenge.target_gauntlet_swift"],
+      "unlock_cost": 8000,
+      "required_balls": 1,
+      "map": {"x": 1369, "y": 1720},
+      "encounter": {
+        "type": "survival",
+        "arena_id": "arena.rectangle",
+        "arena_effect": "",
+        "time_limit": 45,
+        "objective": {"type": "clear_targets", "target": 10},
+        "actors": [
+          {"id": "target_wave", "kind": "dummy", "team": "enemy", "count": 10, "seed": 49004, "position": [130, 0]}
+        ],
+        "arena_objects": [
+          {"type": "target_wave", "position": [0, 0], "params": {"targets_per_phase": 10, "phase_count": 1, "start_phase": 3}}
+        ]
+      }
+    },
+    {
+      "id": "challenge.first_dungeon",
+      "name": "The Bone Road",
+      "description": "Lead three owned balls through a branching dungeon. Health, fallen allies, reloads and potions persist until the Bone Warden falls or the party is wiped out.",
+      "color": "orange",
+      "branch": "DUNGEONS",
+      "prerequisites": ["challenge.first_spark"],
+      "unlock_cost": 1000,
+      "required_balls": 3,
+      "map": {"x": -277, "y": -160},
+      "encounter": {
+        "type": "boss",
+        "arena_id": "arena.octagon",
+        "arena_effect": "",
+        "time_limit": 180,
+        "objective": {"type": "defeat_all", "target": 1},
+        "actors": [
+          {"id": "skeleton_boss", "display_name": "BONE WARDEN", "kind": "boss", "team": "enemy", "seed": 48001, "position": [105, 0], "hp_multiplier": 4, "size_multiplier": 1.35, "loadout": ["weapon.bow", "weapon.bow", "ability.dodge"]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.skeleton_pair",
+      "name": "Bone Pair",
+      "description": "Face two 70 HP Skeleton archers alone. Each carries one Bow.",
+      "color": "green",
+      "branch": "BEASTS",
+      "prerequisites": ["challenge.small_beast"],
+      "unlock_cost": 1500,
+      "required_balls": 1,
+      "map": {"x": 503, "y": -386},
+      "encounter": {
+        "type": "beast_hunt",
+        "arena_id": "arena.hexagon",
+        "arena_effect": "",
+        "time_limit": 100,
+        "objective": {"type": "defeat_all", "target": 2},
+        "actors": [
+          {"id": "skeleton", "display_name": "SKELETON", "kind": "beast", "team": "enemy", "count": 2, "seed": 48101, "position": [135, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.goblin_raiders",
+      "name": "Goblin Raiders",
+      "description": "Deploy two owned balls against four small Goblins with 70 HP, Poison Darts and Orbit Daggers.",
+      "color": "green",
+      "branch": "BEASTS",
+      "prerequisites": ["challenge.skeleton_pair"],
+      "unlock_cost": 2000,
+      "required_balls": 2,
+      "map": {"x": 730, "y": -612},
+      "encounter": {
+        "type": "teamfight",
+        "arena_id": "arena.octagon",
+        "arena_effect": "",
+        "time_limit": 120,
+        "objective": {"type": "defeat_all", "target": 4},
+        "actors": [
+          {"id": "goblin", "display_name": "GOBLIN", "kind": "beast", "team": "enemy", "count": 4, "seed": 48201, "position": [135, 0]}
+        ],
+        "arena_objects": []
+      }
+    },
+    {
+      "id": "challenge.wolf_pack",
+      "name": "Wolf Pack",
+      "description": "Bring two owned balls against a powerful Dire Wolf and two Wild Dogs.",
+      "color": "green",
+      "branch": "BEASTS",
+      "prerequisites": ["challenge.small_beast"],
+      "unlock_cost": 1500,
+      "required_balls": 2,
+      "map": {"x": 586, "y": -243},
+      "encounter": {
+        "type": "teamfight",
+        "arena_id": "arena.diamond",
+        "arena_effect": "",
+        "time_limit": 120,
+        "objective": {"type": "defeat_all", "target": 3},
+        "actors": [
+          {"id": "dire_wolf", "display_name": "DIRE WOLF", "kind": "beast", "team": "enemy", "seed": 48301, "position": [135, -65]},
+          {"id": "wild_dog", "display_name": "WILD DOG", "kind": "beast", "team": "enemy", "count": 2, "seed": 48311, "position": [135, 70]}
         ],
         "arena_objects": []
       }
