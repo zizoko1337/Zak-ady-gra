@@ -62,6 +62,15 @@ int main(int argc,char** argv) {
             Match mouseRoom=buildDungeonRoomMatch(c,*findDungeonRoom("mice"),party,8103);
             check(mouseRoom.mouseInvasion.enabled && mouseRoom.mouseInvasion.maxCount==30 && mouseRoom.mouseInvasion.interval==1,"Dungeon mouse room setup is incorrect");
         }
+        {
+            auto first=geodeReward(42817),again=geodeReward(42817);
+            check(first.mineral==again.mineral && first.coins==again.coins && first.tier==again.tier,"A geode reward must be fixed by its seed");
+            std::set<int> geodeTiers;
+            for(uint32_t seed=1;seed<2000;++seed) geodeTiers.insert(geodeReward(seed).tier);
+            check(geodeTiers.size()==8,"Geode reward table should include empty and seven mineral tiers");
+            Match geodeMatch=buildGeodeMatch(c,generateBall(c,9182),42817);
+            check(geodeMatch.arena.id=="arena.circle" && geodeMatch.fighters.size()==2 && geodeMatch.fighters[0].team==0 && geodeMatch.fighters[1].actorKind=="geode" && geodeMatch.fighters[1].stationary && geodeMatch.fighters[1].harmless && geodeMatch.fighters[1].maxHp==10000,"Geode breaking match is configured incorrectly");
+        }
         check(c.rules.limit==180 && c.rules.suddenDps==0,"Fights should draw after three minutes with no overtime damage");
         check(findItem(c,"weapon.pistol").get("damage")==40,"Heavy Pistol damage should be 40");
         check(findItem(c,"weapon.mines").get("damage")==20,"Minelayer damage should be nerfed to 20");

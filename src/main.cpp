@@ -135,8 +135,8 @@ struct App {
     std::unique_ptr<Simulation> sim;
     std::mt19937 random{std::random_device{}()};
     int selected=0,stake=100,speed=1,returned=0;
-    bool paused=false,catalogOpen=false,rulesOpen=false,collectionOpen=false,challengesOpen=false,inspectionOpen=false;
-    bool challengeBattleOpen=false,challengeResultSaved=false;
+    bool paused=false,catalogOpen=false,rulesOpen=false,collectionOpen=false,challengesOpen=false,geostonesOpen=false,inspectionOpen=false;
+    bool challengeBattleOpen=false,challengeResultSaved=false,geostoneBattleOpen=false,geodeResultSaved=false;
     bool volumeDragging=false,stakeDragging=false;
     int catalogTab=0,catalogScroll=0,pendingRemove=-1,inspectionMarket=-1,inspectionOwned=-1;
     uint32_t inspectionSeed=0;
@@ -144,6 +144,8 @@ struct App {
     Color inspectionColor=PlayerGreen;
     bool inspectionChallengeEnemy=false;
     int selectedChallenge=0;
+    int selectedGeode=-1,selectedGeodeBreaker=-1,activeGeode=-1;
+    GeodeReward openedGeodeReward;
     std::vector<uint32_t> challengeSquadSeeds;
     std::vector<Fighter> challengeEnemyPreview;
     int challengeEnemyPreviewIndex=-1;
@@ -178,7 +180,7 @@ bool ballPopoverActive=false;
     Fighter ballPopoverFighter;
     Color ballPopoverColor=PlayerGreen;
     explicit App(std::filesystem::path path):root(std::move(path)),catalog(Catalog::load(root/"data/catalog.json")),challenges(ChallengeCatalog::load(root/"data/challenges.json",catalog)),wallet(Wallet::load(root/"save.json",catalog.rules.startingCoins)) {
-        ensureMarket(); ensureChallengeRoots(); rebuildCollectionCache(); wallet.save(root/"save.json"); reroll();
+        ensureMarket(); ensureGeodes(); ensureChallengeRoots(); rebuildCollectionCache(); wallet.save(root/"save.json"); reroll();
         if(audioBank && std::filesystem::exists(root/"settings.json")) {
             try {
                 std::ifstream input(root/"settings.json"); nlohmann::json settings; input>>settings;
@@ -201,6 +203,15 @@ bool ballPopoverActive=false;
         if(wallet.marketInitialized) return;
         wallet.marketBallSeeds=freshMarketSeeds(); wallet.marketInitialized=true;
     }
+    void ensureGeodes() {
+        if(!wallet.geodes.empty()) return;
+        std::set<uint32_t> used;
+        while(wallet.geodes.size()<5) {
+            uint32_t seed=0;
+            do seed=random(); while(seed==0 || !used.insert(seed).second);
+            wallet.geodes.push_back({seed,false,false});
+        }
+    }
     void ensureChallengeRoots() {
         for(const auto& challenge:challenges.challenges) if(challenge.prerequisites.empty() && !wallet.challengeUnlocked(challenge.id)) wallet.unlockChallenge(challenge);
         selectedChallenge=std::clamp(selectedChallenge,0,static_cast<int>(challenges.challenges.size())-1);
@@ -212,6 +223,10 @@ bool ballPopoverActive=false;
             ownedBallCache.push_back(marketBall?generateMarketBall(catalog,seed):generateBall(catalog,seed));
         }
         for(size_t n=0;n<marketBallCache.size();++n) marketBallCache[n]=wallet.marketBallSeeds[n]?generateMarketBall(catalog,wallet.marketBallSeeds[n]):Fighter{};
+    }
+    Color geodeColor(int tier) const {
+        static const std::array<Color,8> colors={Color{91,102,116,255},Color{180,171,153,255},Color{159,107,227,255},Color{247,201,75,255},Color{255,121,81,255},Color{81,211,232,255},Color{239,73,93,255},Color{220,246,255,255}};
+        return colors[std::clamp(tier,0,7)];
     }
     void openInspector(const Fighter& fighter,uint32_t seed,int marketIndex=-1,int ownedIndex=-1,bool challengeEnemy=false,Color color=PlayerGreen) {
         inspectedBall=fighter; inspectionSeed=seed; inspectionMarket=marketIndex; inspectionOwned=ownedIndex; inspectionChallengeEnemy=challengeEnemy; inspectionColor=color; inspectionOpen=true; pendingRemove=-1;
@@ -449,6 +464,37 @@ bool ballPopoverActive=false;
         floating.clear(); impacts.clear(); messageCooldown.assign(sim->match.fighters.size(),0); countdown.start();
         if(audioBank) audioBank->play(Cue::Tick);
     }
+    void startGeode() {
+        if(geostoneBattleOpen || selectedGeode<0 || selectedGeode>=static_cast<int>(wallet.geodes.size()) || selectedGeodeBreaker<0 || selectedGeodeBreaker>=static_cast<int>(ownedBallCache.size())) return;
+        auto& geode=wallet.geodes[selectedGeode];
+        if(geode.opened || (!geode.purchased && wallet.coins<1000)) return;
+        if(!geode.purchased) {
+            Wallet before=wallet; geode.purchased=true; wallet.coins-=1000;
+            try { wallet.save(root/"save.json"); }
+            catch(const std::exception& e) { wallet=std::move(before); error=e.what(); return; }
+        }
+        Fighter breaker=ownedBallCache[selectedGeodeBreaker]; breaker.appearanceSeed=wallet.ownedBallSeeds[selectedGeodeBreaker];
+        sim=std::make_unique<Simulation>(buildGeodeMatch(catalog,breaker,geode.seed),catalog.rules);
+        geostoneBattleOpen=true; geodeResultSaved=false; activeGeode=selectedGeode; openedGeodeReward={};
+        paused=false; accumulator=0; resultAge=0; lastEvent=0; floating.clear(); impacts.clear(); messageCooldown.assign(sim->match.fighters.size(),0); countdown.start();
+        if(audioBank) audioBank->play(Cue::Tick);
+    }
+    void resolveGeode() {
+        if(!geostoneBattleOpen || geodeResultSaved || !sim || !sim->finished) return;
+        geodeResultSaved=true; resultAge=0; floating.clear();
+        if(activeGeode<0 || activeGeode>=static_cast<int>(wallet.geodes.size())) { error="The opened geode could not be found in the save."; return; }
+        auto& geode=wallet.geodes[activeGeode];
+        if(sim->winner==0) {
+            geode.opened=true; openedGeodeReward=geodeReward(geode.seed);
+            wallet.coins=std::min(1000000000,wallet.coins+openedGeodeReward.coins);
+            if(audioBank) audioBank->play(Cue::Win);
+        } else if(audioBank) audioBank->play(Cue::Lose);
+        persist();
+    }
+    void leaveGeostones() {
+        sim.reset(); geostoneBattleOpen=false; geodeResultSaved=false; activeGeode=-1; paused=false; countdown.reset(); accumulator=0; resultAge=0; lastEvent=0;
+        floating.clear(); impacts.clear(); messageCooldown.assign(2,0);
+    }
     void leaveChallenge() {
         sim.reset(); challengeBattleOpen=false; challengeResultSaved=false; activeChallengeId.clear(); paused=false; countdown.reset();
         accumulator=0; resultAge=0; lastEvent=0; floating.clear(); impacts.clear(); messageCooldown.assign(2,0);
@@ -456,6 +502,7 @@ bool ballPopoverActive=false;
         dungeonClearedRooms.clear(); dungeonPotions={0,0,0}; dungeonDraggedPotion=-1; dungeonLootPotion=-1; dungeonLootFlight=-1; dungeonTransition=0; dungeonTransitionTarget.clear(); dungeonTransitionDirection.clear();
     }
     void settle() {
+        if(geostoneBattleOpen && sim && sim->finished) { resolveGeode(); return; }
         if(dungeonActive && sim && sim->finished) { resolveDungeonRoom(); return; }
         if(challengeBattleOpen && sim && sim->finished) {
             if(!challengeResultSaved) {
@@ -479,7 +526,7 @@ bool ballPopoverActive=false;
             audioBank->update(dt);
             if(IsKeyPressed(KEY_M)) { audioBank->setMuted(!audioBank->muted); saveAudio(); }
         }
-        bool simulationView=!collectionOpen && (!challengesOpen || challengeBattleOpen) && !inspectionOpen;
+        bool simulationView=!collectionOpen && (!challengesOpen || challengeBattleOpen) && (!geostonesOpen || geostoneBattleOpen) && !inspectionOpen;
         if(!paused && !catalogOpen && !rulesOpen && simulationView) {
             for(auto& label:floating) label.age+=dt;
             for(auto& cooldown:messageCooldown) cooldown=std::max(0.0f,cooldown-dt);
@@ -494,8 +541,9 @@ bool ballPopoverActive=false;
             catch(const std::exception& e) { error=std::string("Catalog error: ")+e.what(); }
         }
         if(IsKeyPressed(KEY_ESCAPE) && inspectionOpen) { inspectionOpen=false; pendingRemove=-1; }
+        else if(IsKeyPressed(KEY_ESCAPE) && geostoneBattleOpen && sim && sim->finished) leaveGeostones();
         else if(IsKeyPressed(KEY_ESCAPE) && challengeBattleOpen && sim && sim->finished) leaveChallenge();
-        else if(IsKeyPressed(KEY_ESCAPE) && (collectionOpen || challengesOpen) && !catalogOpen && !rulesOpen) { collectionOpen=false; challengesOpen=false; }
+        else if(IsKeyPressed(KEY_ESCAPE) && (collectionOpen || challengesOpen || geostonesOpen) && !catalogOpen && !rulesOpen) { collectionOpen=false; challengesOpen=false; geostonesOpen=false; }
         if(!catalogOpen && !rulesOpen && simulationView) {
             if(IsKeyPressed(KEY_SPACE)) { if(live()) paused=!paused; else if(!sim) start(); }
             if(IsKeyPressed(KEY_R) && !live()) reroll();
@@ -527,7 +575,19 @@ bool ballPopoverActive=false;
     }
     void fighterPanel(int side) {
         const auto& f=sim?sim->match.fighters[side]:preview.fighters[side];
-        float x=side==0?28.0f:1202.0f; Color color=Team[side];
+        float x=side==0?28.0f:1202.0f; Color color=geostoneBattleOpen?(side==0?PlayerGreen:Color{150,173,196,255}):Team[side];
+        if(geostoneBattleOpen && side==1) {
+            box({x,96,210,700},Panel,Fade(color,0.7f),0.04f); DrawRectangleRounded({x+1,97,208,4},0.5f,6,color);
+            text("GEOSTONE",x+16,114,11,color); fitted("SEALED GEODE",x+16,153,178,18);
+            Vector2 p{x+105,213}; DrawPoly(p,8,48,22,Color{62,75,91,255}); DrawPolyLines(p,8,48,22,Fade(White,0.55f)); DrawPoly(p,6,29,-8,Color{88,105,125,255});
+            float hp=std::clamp(f.hp/f.maxHp,0.0f,1.0f); text("INTEGRITY",x+16,280,10,Muted); fitted(number(f.hp)+" / 10,000",x+16,299,165,15,color);
+            DrawRectangleRounded({x+16,325,178,7},1,8,Border); DrawRectangleRounded({x+16,325,178*hp,7},1,8,color);
+            text("STATIONARY",x+16,357,10,Muted); text("HARMLESS",x+16,378,10,Muted);
+            DrawLineEx({x+16,419},{x+194,419},1,Border); text("CONTENTS",x+16,430,10,Muted);
+            text("LOCKED TO SEED",x+16,460,13,White); text("Revealed only after",x+16,490,11,Muted); text("the geode shatters.",x+16,509,11,Muted);
+            text("SEED "+std::to_string(activeGeode>=0?wallet.geodes[activeGeode].seed:0),x+16,555,10,color);
+            return;
+        }
         box({x,96,210,700},Panel,selected==side?Fade(color,0.7f):Border,0.04f);
         DrawRectangleRounded({x+1,97,208,4},0.5f,6,color);
         text(side==0?"FIGHTER A":"FIGHTER B",x+16,114,11,color);
@@ -569,6 +629,7 @@ bool ballPopoverActive=false;
         auto combatColor=[&](int fighterIndex) {
             if(fighterIndex<0 || fighterIndex>=static_cast<int>(shown.fighters.size())) return Accent;
             int team=shown.fighters[fighterIndex].team;
+            if(geostoneBattleOpen) return team==0?PlayerGreen:Color{150,173,196,255};
             return shown.challenge?(team==0?PlayerGreen:Coral):Team[std::clamp(team,0,1)];
         };
         box(ArenaFrame,Color{12,18,28,255},Border,0.03f);
@@ -840,14 +901,25 @@ bool ballPopoverActive=false;
             }
             DrawCircleV(p,f.radius+7,Fade(c,0.09f));
             DrawCircleV({p.x+2,p.y+5},f.radius,Color{4,8,14,200});
+            if(f.actorKind=="geode") {
+                float integrity=std::clamp(f.hp/f.maxHp,0.0f,1.0f);
+                Color shell{69,82,99,255},facet{101,119,140,255};
+                DrawPoly(p,8,f.radius,22,shell); DrawPolyLines(p,8,f.radius,22,Fade(White,0.58f)); DrawPoly(p,6,f.radius*0.64f,-8,facet);
+                for(int crack=0;crack<5;++crack) {
+                    float angle=0.55f+crack*1.21f; float crackLength=(1-integrity)*(f.radius*0.75f)+(crack%2)*6;
+                    Vec start{std::cos(angle)*5,std::sin(angle)*5},end=start+Vec{std::cos(angle+0.25f),std::sin(angle+0.25f)}*crackLength;
+                    DrawLineEx({p.x+start.x,p.y+start.y},{p.x+end.x,p.y+end.y},2,Fade(Background,0.75f));
+                }
+                DrawCircleV({p.x-f.radius*0.28f,p.y-f.radius*0.31f},f.radius*0.15f,Fade(White,0.22f));
+            }
             bool skeleton=f.actorKind=="skeleton" || f.actorKind=="skeleton_boss";
             Color body=skeleton?Color{205,210,205,255}:f.actorKind=="dire_wolf"?Color{92,61,41,255}:f.actorKind=="wild_dog"?Color{145,91,48,255}:f.actorKind=="goblin"?Color{80,184,97,255}:f.actorKind=="treasure_chest"?Color{151,91,38,255}:f.actorKind=="dummy"?Color{137,120,96,255}:f.actorKind=="boss"?Color{255,174,62,255}:c;
-            DrawCircleV(p,f.radius,f.flash>0?White:Fade(body,f.invulnerable>0?0.4f:1));
+            if(f.actorKind!="geode") DrawCircleV(p,f.radius,f.flash>0?White:Fade(body,f.invulnerable>0?0.4f:1));
             if(f.actorKind=="boss" || f.actorKind=="skeleton_boss") { DrawCircleLinesV(p,f.radius+5,Accent); DrawCircleLinesV(p,f.radius+9,Fade(Coral,0.7f)); }
             if(f.actorKind=="treasure_chest") {
                 DrawRectangleRounded({p.x-f.radius*0.8f,p.y-f.radius*0.45f,f.radius*1.6f,f.radius*1.05f},0.12f,6,body);
                 DrawRectangleRec({p.x-f.radius*0.8f,p.y-f.radius*0.15f,f.radius*1.6f,3},Accent); DrawCircleV({p.x,p.y+2},3,Accent);
-            } else {
+            } else if(f.actorKind!="geode") {
                 drawFace(p,f.radius,fighterLook,realClock,{aim.x,aim.y},f.flash,sim && sim->finished && sim->winner!=f.team);
                 if(skeleton) { DrawCircleV({p.x-6,p.y-2},3,Background); DrawCircleV({p.x+6,p.y-2},3,Background); DrawLineEx({p.x-7,p.y+8},{p.x+7,p.y+8},2,Background); }
                 if(f.actorKind=="goblin") {
@@ -931,16 +1003,16 @@ bool ballPopoverActive=false;
         }
         if(sim && sim->finished && (!dungeonActive || dungeonFinished)) {
             float enter=1-std::pow(1-std::min(1.0f,resultAge/0.45f),3),offset=(1-enter)*35;
-            Color c=sim->winner<0?Accent:sim->match.challenge?(sim->winner==0?PlayerGreen:Coral):Team[sim->winner];
+            Color c=sim->winner<0?Accent:geostoneBattleOpen?(sim->winner==0?PlayerGreen:Coral):sim->match.challenge?(sim->winner==0?PlayerGreen:Coral):Team[sim->winner];
             for(int n=0;n<40 && resultAge<2.4f;++n) {
                 float angle=n*2.39996f,velocity=75+(n%7)*19.0f;
                 float x=720+std::cos(angle)*velocity*resultAge,y=422+std::sin(angle)*velocity*resultAge+55*resultAge*resultAge;
                 DrawRectanglePro({x,y,5,9},{2,4},n*17+resultAge*140,Fade(n%3?c:Accent,std::max(0.0f,1-resultAge/2.4f)));
             }
             box({459,347+offset,522,159},Fade(Background,0.95f*enter),Fade(c,enter),0.08f);
-            std::string outcome=dungeonActive?(sim->winner==0?"DUNGEON CLEARED":"PARTY DEFEATED"):sim->match.challenge?(sim->winner==0?"CHALLENGE COMPLETE":"CHALLENGE FAILED"):sim->winner<0?"DRAW":sim->match.fighters[sim->winner].name+" WINS!";
+            std::string outcome=geostoneBattleOpen?(sim->winner==0?"GEODE SHATTERED":"GEODE RUN FAILED"):dungeonActive?(sim->winner==0?"DUNGEON CLEARED":"PARTY DEFEATED"):sim->match.challenge?(sim->winner==0?"CHALLENGE COMPLETE":"CHALLENGE FAILED"):sim->winner<0?"DRAW":sim->match.fighters[sim->winner].name+" WINS!";
             centered(outcome,720,367+offset,34+8*(1-enter),Fade(c,enter));
-            std::string resultDetail=dungeonActive?(sim->winner==0?"The Bone Warden has fallen.":"The surviving path ends here."):sim->match.challenge?(sim->winner==0?"The next branches are now available.":"Adjust your squad and try again."):sim->winner<0?"Your stake has been refunded.":sim->winner==selected?"Good call. +"+std::to_string(returned-wallet.stake)+" coins":"The arena takes this one. -"+std::to_string(wallet.stake)+" coins";
+            std::string resultDetail=geostoneBattleOpen?(sim->winner==0?(openedGeodeReward.coins>0?openedGeodeReward.mineral+"  +"+std::to_string(openedGeodeReward.coins)+" coins":"EMPTY GEODE - no crystal inside"):"The geode is intact. You can retry without paying again."):dungeonActive?(sim->winner==0?"The Bone Warden has fallen.":"The surviving path ends here."):sim->match.challenge?(sim->winner==0?"The next branches are now available.":"Adjust your squad and try again."):sim->winner<0?"Your stake has been refunded.":sim->winner==selected?"Good call. +"+std::to_string(returned-wallet.stake)+" coins":"The arena takes this one. -"+std::to_string(wallet.stake)+" coins";
             centered(resultDetail,720,425+offset,17,Fade(White,enter));
             float playerDamage=0,enemyDamage=0; for(const auto& fighter:sim->match.fighters) (fighter.team==0?playerDamage:enemyDamage)+=fighter.damageDealt;
             centered("Damage dealt: "+number(playerDamage)+"  /  "+number(enemyDamage),720,468+offset,12,Fade(Muted,enter));
@@ -971,6 +1043,16 @@ bool ballPopoverActive=false;
         for(int n=0;n<5;++n) if(button({580.0f+n*118,754,105,32},std::to_string(speeds[n])+"×",speed==speeds[n],true,Accent,14)) speed=speeds[n];
     }
     void betSlip() {
+        if(geostoneBattleOpen) {
+            box({28,810,1384,82},Panel,Border,0.08f); DrawRectangleRounded({29,811,4,80},0.5f,6,Accent);
+            text("GEOSTONE RUN",51,821,10,Accent);
+            if(activeGeode>=0 && activeGeode<static_cast<int>(wallet.geodes.size())) text("SEED "+std::to_string(wallet.geodes[activeGeode].seed),51,846,18,White);
+            text(sim&&sim->finished?(sim->winner==0?(openedGeodeReward.coins>0?openedGeodeReward.mineral+"  +"+std::to_string(openedGeodeReward.coins)+" coins":"EMPTY GEODE"):"GEODE STILL INTACT"):"Destroy the 10,000 HP geode to reveal its crystal.",350,840,14,sim&&sim->finished?Accent:Muted);
+            if(sim&&sim->finished) {
+                if(button({1102,825,286,51},"BACK TO GEOSTONES",true,true,Accent,14)) leaveGeostones();
+            } else button({1102,825,286,51},countdown.active()?"GET READY...":"BREAKING IN PROGRESS",false,false,Accent,14);
+            return;
+        }
         box({28,810,1384,82},Panel,Border,0.08f);
         DrawRectangleRounded({29,811,4,80},0.5f,6,Accent);
         text("YOUR BET SLIP",51,821,10,Accent);
@@ -1282,6 +1364,56 @@ bool ballPopoverActive=false;
         } else {
             if(button({1102,825,286,51},"ABANDON CHALLENGE",false,true,Coral,12)) leaveChallenge();
         }
+    }
+    void geostonesScreen() {
+        text("GEOSTONES",28,98,30);
+        text("Buy one sealed geode, choose a breaker, then crack it on the circular arena.",28,133,13,Muted);
+        text("Every prize is already locked into its seed before the geode is opened.",28,155,11,Color{108,128,151,255});
+        box({28,178,1384,244},Panel,Border,0.04f);
+        text("SEALED GEODE SHOP",52,198,14,Accent); text("5 stones / 1,000 coins each",52,221,11,Muted);
+        for(size_t index=0;index<wallet.geodes.size();++index) {
+            const auto& geode=wallet.geodes[index]; float x=52+static_cast<float>(index)*270,y=248; Rectangle card{x,y,244,148};
+            bool chosen=selectedGeode==static_cast<int>(index),available=!geode.opened;
+            bool hover=!inputBlocked && available && inside(card);
+            box(card,chosen?Color{34,43,59,255}:PanelAlt,chosen?Accent:Border,0.08f);
+            Vector2 crystal{x+55,y+72};
+            DrawPoly(crystal,8,40,22,Color{64,76,91,255}); DrawPolyLines(crystal,8,40,22,Fade(White,0.45f));
+            DrawPoly(crystal,6,24,-8,Color{90,105,123,255}); DrawCircleV({crystal.x-9,crystal.y-10},5,Fade(White,0.28f));
+            if(geode.opened) { DrawCircleV(crystal,26,Color{25,32,43,255}); DrawLineEx({crystal.x-17,crystal.y-17},{crystal.x+17,crystal.y+17},3,Muted); DrawLineEx({crystal.x-17,crystal.y+17},{crystal.x+17,crystal.y-17},3,Muted); }
+            text(geode.opened?"OPENED":"SEALED GEODE",x+105,y+25,15,geode.opened?Muted:White);
+            text("SEED "+std::to_string(geode.seed),x+105,y+51,9,Muted);
+            std::string state=geode.opened?"CONTENT CLAIMED":geode.purchased?"READY TO CRACK":"1,000 COINS";
+            text(state,x+105,y+83,12,geode.opened?Muted:geode.purchased?PlayerGreen:Accent);
+            if(hover) { SetMouseCursor(MOUSE_CURSOR_POINTING_HAND); if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { selectedGeode=static_cast<int>(index); if(audioBank) audioBank->play(Cue::Click); } }
+        }
+        box({28,444,940,396},Panel,Border,0.04f);
+        text("CHOOSE YOUR BREAKER",52,466,14,PlayerGreen);
+        text("The ball keeps its current loadout. The geode has 10,000 HP and cannot attack.",52,490,11,Muted);
+        for(size_t index=0;index<ownedBallCache.size();++index) {
+            const auto& fighter=ownedBallCache[index]; int column=static_cast<int>(index%4),row=static_cast<int>(index/4); float x=52+column*218.0f,y=519+row*91.0f; Rectangle card{x,y,202,76};
+            bool chosen=selectedGeodeBreaker==static_cast<int>(index),hover=!inputBlocked && inside(card);
+            box(card,chosen?Fade(PlayerGreen,0.2f):PanelAlt,chosen?PlayerGreen:Border,0.08f);
+            drawPortrait({x+34,y+38},19,PlayerGreen,appearanceFor(wallet.ownedBallSeeds[index],0),realClock);
+            fitted(fighter.name+" "+fighter.title,x+64,y+13,125,11,White); text(std::to_string(fighter.points)+" PTS",x+64,y+37,9,Muted);
+            text(chosen?"SELECTED":"SELECT",x+64,y+56,9,chosen?PlayerGreen:Muted); offerBallPopover(fighter,card,PlayerGreen);
+            if(hover) { SetMouseCursor(MOUSE_CURSOR_POINTING_HAND); if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { selectedGeodeBreaker=static_cast<int>(index); if(audioBank) audioBank->play(Cue::Click); } }
+        }
+        if(ownedBallCache.empty()) centered("Buy a ball in My Collection before entering Geostones.",498,580,14,Muted);
+        box({990,444,422,396},Panel,Border,0.04f);
+        text("BREAKING RUN",1016,466,14,Accent);
+        bool geodeReady=selectedGeode>=0 && selectedGeode<static_cast<int>(wallet.geodes.size()) && !wallet.geodes[selectedGeode].opened;
+        bool breakerReady=selectedGeodeBreaker>=0 && selectedGeodeBreaker<static_cast<int>(ownedBallCache.size());
+        if(geodeReady) {
+            const auto& geode=wallet.geodes[selectedGeode]; text("SELECTED GEODE",1016,510,10,Muted); text("SEED "+std::to_string(geode.seed),1016,531,17,White);
+            text(geode.purchased?"Already paid. Retry until it breaks.":"PRICE",1016,570,11,Muted);
+            text(geode.purchased?"READY":"1,000 COINS",1016,592,24,geode.purchased?PlayerGreen:Accent);
+        } else { centered("Choose a sealed geode",1201,538,14,Muted); }
+        if(breakerReady) { text("BREAKER",1016,645,10,Muted); fitted(ownedBallCache[selectedGeodeBreaker].name,1016,665,350,18,PlayerGreen); }
+        bool ready=geodeReady && breakerReady;
+        std::string action=ready && wallet.geodes[selectedGeode].purchased?"ENTER THE ARENA":ready?"BUY & BREAK  -  1,000":"SELECT GEODE + BREAKER";
+        if(button({1016,761,370,48},action,true,ready && (wallet.geodes[selectedGeode].purchased || wallet.coins>=1000),Accent,12)) startGeode();
+        text("Contents stay secret until the geode shatters.",1016,817,10,Muted);
+        text("Geode stock will expand in a later update.",28,895,11,Muted);
     }
     void challengesScreen() {
         if(challengeBattleOpen) { challengeBattleScreen(); return; }
@@ -1613,32 +1745,34 @@ bool ballPopoverActive=false;
         hovered=nullptr; ballPopoverActive=false; SetMouseCursor(MOUSE_CURSOR_DEFAULT); ClearBackground(Background);
         DrawCircle(43,40,12,Accent); DrawCircle(43,40,5,Background);
         text("ORBITAL",65,24,26); text("ODDS",182,24,26,Accent);
-        if(button({276,23,92,34},"ARENA",!collectionOpen&&!challengesOpen,!live()&&!challengeBattleOpen,Accent,10)) { collectionOpen=false; challengesOpen=false; inspectionOpen=false; pendingRemove=-1; }
-        if(button({376,23,132,34},"MY COLLECTION",collectionOpen,!live()&&!challengeBattleOpen,Accent,10)) { collectionOpen=true; challengesOpen=false; catalogOpen=false; rulesOpen=false; }
-        if(button({516,23,116,34},"CHALLENGES",challengesOpen,!live()&&!challengeBattleOpen,Accent,10)) { challengesOpen=true; collectionOpen=false; inspectionOpen=false; catalogOpen=false; rulesOpen=false; }
+        if(button({276,23,92,34},"ARENA",!collectionOpen&&!challengesOpen&&!geostonesOpen,!live()&&!challengeBattleOpen&&!geostoneBattleOpen,Accent,10)) { collectionOpen=false; challengesOpen=false; geostonesOpen=false; inspectionOpen=false; pendingRemove=-1; }
+        if(button({376,23,132,34},"MY COLLECTION",collectionOpen,!live()&&!challengeBattleOpen&&!geostoneBattleOpen,Accent,10)) { collectionOpen=true; challengesOpen=false; geostonesOpen=false; catalogOpen=false; rulesOpen=false; }
+        if(button({516,23,116,34},"CHALLENGES",challengesOpen,!live()&&!challengeBattleOpen&&!geostoneBattleOpen,Accent,10)) { challengesOpen=true; collectionOpen=false; geostonesOpen=false; inspectionOpen=false; catalogOpen=false; rulesOpen=false; }
+        if(button({646,23,96,34},"GEOSTONES",geostonesOpen,!live()&&!challengeBattleOpen&&!geostoneBattleOpen,Accent,9)) { geostonesOpen=true; collectionOpen=false; challengesOpen=false; inspectionOpen=false; catalogOpen=false; rulesOpen=false; }
         if(audioBank) {
-            if(button({646,24,82,32},!audioBank->ready?"NO AUDIO":audioBank->muted?"MUTED":"SFX ON",false,audioBank->ready,Accent,9)) {
+            if(button({752,24,60,32},!audioBank->ready?"NO SFX":audioBank->muted?"MUTED":"SFX",false,audioBank->ready,Accent,8)) {
                 audioBank->setMuted(!audioBank->muted); saveAudio(); audioBank->play(Cue::Click);
             }
-            Rectangle slider{738,24,61,32};
+            Rectangle slider{819,24,43,32};
             if(!inputBlocked && audioBank->ready && inside(slider)) {
                 SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
                 if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) volumeDragging=true;
             }
             if(volumeDragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) { audioBank->setVolume((mouse.x-slider.x)/slider.width); audioBank->setMuted(false); }
             if(volumeDragging && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) { volumeDragging=false; saveAudio(); }
-            DrawRectangleRounded({738,38,61,4},1,6,Border);
-            DrawRectangleRounded({738,38,61*audioBank->volume,4},1,6,audioBank->muted?Muted:Accent);
-            DrawCircleV({738+61*audioBank->volume,40},5,audioBank->muted?Muted:Accent);
+            DrawRectangleRounded({819,38,43,4},1,6,Border);
+            DrawRectangleRounded({819,38,43*audioBank->volume,4},1,6,audioBank->muted?Muted:Accent);
+            DrawCircleV({819+43*audioBank->volume,40},5,audioBank->muted?Muted:Accent);
         }
-        if(button({813,24,76,32},"Rules",rulesOpen,true,Accent,10)) rulesOpen=!rulesOpen;
-        if(button({897,24,82,32},"Catalog",catalogOpen,true,Accent,10)) catalogOpen=!catalogOpen;
-        if constexpr(ShowDebugAddCoins) if(button({990,24,103,32},"ADD 10K",false,true,Coral,10)) { wallet.coins=std::min(1000000000,wallet.coins+10000); persist(); }
-        box({1169,18,243,45},PanelAlt,Border,0.2f);
-        DrawCircle(1193,40,7,Accent); text(std::to_string(wallet.coins),1212,25,23,Accent); text("COINS",1348,34,10,Muted);
+        if(button({872,24,62,32},"Rules",rulesOpen,true,Accent,9)) rulesOpen=!rulesOpen;
+        if(button({941,24,70,32},"Catalog",catalogOpen,true,Accent,9)) catalogOpen=!catalogOpen;
+        if constexpr(ShowDebugAddCoins) if(button({1018,24,90,32},"ADD 10K",false,true,Coral,9)) { wallet.coins=std::min(1000000000,wallet.coins+10000); persist(); }
+        box({1120,18,292,45},PanelAlt,Border,0.2f);
+        DrawCircle(1144,40,7,Accent); text(std::to_string(wallet.coins),1163,25,23,Accent); text("COINS",1348,34,10,Muted);
         DrawLine(28,77,1412,77,Border);
         if(challengesOpen) challengesScreen();
         else if(collectionOpen) collectionScreen();
+        else if(geostonesOpen && !geostoneBattleOpen) geostonesScreen();
         else {
             fighterPanel(0); fighterPanel(1); arena(); controls(); betSlip();
             text("F5  reload balance   ·   SPACE  start / pause   ·   1–5  speed   ·   M  mute",28,907,11,Muted);

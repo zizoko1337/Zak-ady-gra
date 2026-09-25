@@ -570,6 +570,33 @@ Match buildDungeonRoomMatch(const Catalog& c,const DungeonRoomDefinition& room,c
     }
     return match;
 }
+GeodeReward geodeReward(uint32_t seed) {
+    // The seed is the whole roll.  Reopening the save or replaying the geode can never change its prize.
+    uint32_t roll=mix32(seed^0x6d2b79f5u)%100;
+    uint32_t value=mix32(seed^0x9e3779b9u);
+    auto ranged=[&](int low,int high) { return low+static_cast<int>(value%static_cast<uint32_t>(high-low+1)); };
+    if(roll<45) return {"EMPTY GEODE",0,0};
+    if(roll<65) return {"SMOKY QUARTZ",ranged(800,1400),1};
+    if(roll<80) return {"AMETHYST",ranged(7500,12500),2};
+    if(roll<90) return {"CITRINE",ranged(16000,24000),3};
+    if(roll<95) return {"FIRE OPAL",ranged(43000,55000),4};
+    if(roll<98) return {"AQUAMARINE",ranged(62000,78000),5};
+    if(roll<99) return {"RUBY",ranged(80000,90000),6};
+    return {"STAR DIAMOND",ranged(95000,110000),7};
+}
+Match buildGeodeMatch(const Catalog& c,const Fighter& breaker,uint32_t geodeSeed) {
+    auto arena=std::find_if(c.arenas.begin(),c.arenas.end(),[](const Arena& value){ return value.id=="arena.circle"; });
+    require(arena!=c.arenas.end(),"Geostones requires arena.circle.");
+    Match match; match.seed=geodeSeed; match.arena=*arena;
+    Fighter player=breaker; player.team=0; player.actorKind="fighter"; player.position={-112,0}; player.previous=player.position;
+    player.hp=player.maxHp; player.velocity={player.speed,0}; player.angle=0; player.damageDealt=0;
+    std::fill(player.cooldowns.begin(),player.cooldowns.end(),0); std::fill(player.hitCooldowns.begin(),player.hitCooldowns.end(),0);
+    Fighter geode; geode.name="SEALED GEODE"; geode.title="the Unknown"; geode.actorKind="geode"; geode.team=1;
+    geode.maxHp=geode.hp=10000; geode.radius=46; geode.position={78,0}; geode.previous=geode.position;
+    geode.stationary=true; geode.harmless=true; geode.contactDamage=0; geode.appearanceSeed=geodeSeed;
+    match.fighters={std::move(player),std::move(geode)};
+    return match;
+}
 int marketPrice(const Fighter& fighter) {
     // The market scale is exponential in points: 27 pts = 100, 100 pts = 3,000, 172 pts = 100,000.
     double points=std::clamp(static_cast<double>(fighter.points),27.0,172.0),raw=0;
@@ -1640,9 +1667,11 @@ void Wallet::resetSeason(int initialCoins) {
     wins=losses=draws=rounds=0; active=false; stake=0; selection=-1; coins=initialCoins;
 }
 void Wallet::save(const std::filesystem::path& path) const {
+    json savedGeodes=json::array();
+    for(const auto& geode:geodes) savedGeodes.push_back({{"seed",geode.seed},{"purchased",geode.purchased},{"opened",geode.opened}});
     json j={{"version",1},{"coins",coins},{"wins",wins},{"losses",losses},{"draws",draws},{"rounds",rounds},{"active",active},{"stake",stake},{"selection",selection},
         {"collection_slots",collectionSlots},{"owned_ball_seeds",ownedBallSeeds},{"owned_ball_market_generated",ownedBallMarketGenerated},{"market_ball_seeds",marketBallSeeds},{"market_initialized",marketInitialized},
-        {"unlocked_challenges",unlockedChallenges},{"completed_challenges",completedChallenges}};
+        {"unlocked_challenges",unlockedChallenges},{"completed_challenges",completedChallenges},{"geodes",savedGeodes}};
     auto temporary=path; temporary+=".tmp";
     { std::ofstream s(temporary); require(s.good(),"Cannot save the wallet."); s<<j.dump(2); s.flush(); require(s.good(),"Wallet save failed."); }
     auto backup=path; backup+=".bak";
@@ -1667,8 +1696,13 @@ Wallet Wallet::load(const std::filesystem::path& path,int initial) {
     }
     w.marketInitialized=j.value("market_initialized",j.contains("market_ball_seeds"));
     w.unlockedChallenges=j.value("unlocked_challenges",std::vector<std::string>{}); w.completedChallenges=j.value("completed_challenges",std::vector<std::string>{});
+    for(const auto& entry:j.value("geodes",json::array())) {
+        Geode geode; geode.seed=entry.at("seed"); geode.purchased=entry.value("purchased",false); geode.opened=entry.value("opened",false);
+        w.geodes.push_back(geode);
+    }
     require(w.collectionSlots>=0 && w.collectionSlots<=12 && w.ownedBallSeeds.size()<=static_cast<size_t>(w.collectionSlots) && w.ownedBallMarketGenerated.size()==w.ownedBallSeeds.size(),"Invalid collection save.");
     require(std::ranges::none_of(w.ownedBallSeeds,[](uint32_t seed){return seed==0;}),"Invalid owned ball seed.");
+    require(w.geodes.size()<=5 && std::ranges::all_of(w.geodes,[](const Geode& geode){ return geode.seed!=0 && (!geode.opened || geode.purchased); }),"Invalid geode save.");
     auto validProgress=[](const std::vector<std::string>& values) { std::set<std::string> unique; for(const auto& value:values) if(value.empty() || value.size()>80 || !unique.insert(value).second) return false; return values.size()<=512; };
     require(validProgress(w.unlockedChallenges) && validProgress(w.completedChallenges),"Invalid challenge progress save.");
     require(std::ranges::all_of(w.completedChallenges,[&](const std::string& id){return w.challengeUnlocked(id);}),"Completed challenge is not unlocked.");
