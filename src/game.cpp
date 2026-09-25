@@ -64,6 +64,13 @@ static int meleeWeight(const Item& item) {
     if(item.meleeClass=="medium") return 1;
     return 2;
 }
+static int shieldCount(const Fighter& fighter) {
+    return static_cast<int>(std::ranges::count_if(fighter.items,[](const Item& item){ return item.id=="weapon.orbit_shield"; }));
+}
+static float turnAngleToward(float current,float desired,float maximumStep) {
+    float difference=std::remainder(desired-current,2*Pi);
+    return std::remainder(current+std::clamp(difference,-maximumStep,maximumStep),2*Pi);
+}
 struct MeleeSegment { Vec base,tip; };
 static MeleeSegment meleeSegment(const Fighter& fighter,const Item& item,float angle) {
     Vec dir{std::cos(angle),std::sin(angle)},perp{-dir.y,dir.x};
@@ -876,7 +883,18 @@ void Simulation::step() {
         f.knockbackTime=std::max(0.0f,f.knockbackTime-Step);
         for(size_t n=0;n<f.items.size();++n) {
             const auto& i=f.items[n]; f.cooldowns[n]-=Step; f.hitCooldowns[n]-=Step; f.meleeClashCooldowns[n]-=Step;
-            if(i.effect=="sword") f.meleeAngles[n]=std::remainder(f.meleeAngles[n]+i.get("rotation_speed")*(f.effect("fast_swings")?2:1)*(f.effect("slow_swings")?0.7f:1)*f.meleeDirections[n]*Step,2*Pi);
+            if(i.effect=="sword") {
+                bool singleShield=i.id=="weapon.orbit_shield" && shieldCount(f)==1;
+                if(singleShield) {
+                    int target=closestEnemy(k,f.position);
+                    if(target>=0) {
+                        float targetAngle=std::atan2(match.fighters[target].position.y-f.position.y,match.fighters[target].position.x-f.position.x);
+                        // A lone shield tracks the closest threat slowly. Faster Swings only gives it a modest turn bonus.
+                        float turnRate=i.get("rotation_speed")*(f.effect("fast_swings")?1.35f:1.0f)*(f.effect("slow_swings")?0.7f:1.0f);
+                        f.meleeAngles[n]=turnAngleToward(f.meleeAngles[n],targetAngle,turnRate*Step);
+                    }
+                } else f.meleeAngles[n]=std::remainder(f.meleeAngles[n]+i.get("rotation_speed")*(f.effect("fast_swings")?2:1)*(f.effect("slow_swings")?0.7f:1)*f.meleeDirections[n]*Step,2*Pi);
+            }
             if(i.category=="weapon" && i.effect!="sword" && f.cooldowns[n]<=0) {
                 fire(k,i,n);
                 float reload=i.get("cooldown")+(f.effect("slow_reload")?1.0f:0.0f);
@@ -1246,8 +1264,12 @@ void Simulation::step() {
                 Vec tangent{-dir.y,dir.x};
                 owner.meleeDirections[itemIndex]=dot(tangent,target.position-tip)>0?-1.0f:1.0f;
             };
-            if(leftShield && !rightShield) deflectAway(right,b,left);
-            else if(rightShield && !leftShield) deflectAway(left,a,right);
+            if(leftShield && rightShield) {
+                // A paired shield orbit is stable: another shield may clash with it but cannot reverse either orbit.
+                if(shieldCount(left)<2) deflectAway(left,a,right);
+                if(shieldCount(right)<2) deflectAway(right,b,left);
+            } else if(leftShield) deflectAway(right,b,left);
+            else if(rightShield) deflectAway(left,a,right);
             else {
                 if(leftWeight<=rightWeight) deflectAway(left,a,right);
                 if(rightWeight<=leftWeight) deflectAway(right,b,left);

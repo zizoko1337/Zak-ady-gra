@@ -470,6 +470,18 @@ int main(int argc,char** argv) {
             check(!s.projectiles.empty() && s.projectiles[0].owner==1 && s.projectiles[0].velocity.x<0,"Orbit Shield did not deflect a projectile");
         }
         {
+            Match m=fixture(c); m.fighters[0].angle=Pi/2; equip(m.fighters[0],findItem(c,"weapon.orbit_shield"));
+            Simulation s(m,c.rules); float before=s.match.fighters[0].meleeAngles[0]; s.step();
+            float turn=std::abs(std::remainder(s.match.fighters[0].meleeAngles[0]-before,2*Pi));
+            check(turn>0.006f && turn<0.007f,"A single Orbit Shield did not slowly track its nearest opponent");
+        }
+        {
+            Match m=fixture(c); m.fighters[0].angle=Pi/2; equip(m.fighters[0],findItem(c,"weapon.orbit_shield")); equip(m.fighters[0],findItem(c,"stat.fast_swings"));
+            Simulation s(m,c.rules); float before=s.match.fighters[0].meleeAngles[0]; s.step();
+            float turn=std::abs(std::remainder(s.match.fighters[0].meleeAngles[0]-before,2*Pi));
+            check(turn>0.0085f && turn<0.0095f,"Faster Swings should modestly improve single-shield tracking");
+        }
+        {
             Match m=fixture(c); equip(m.fighters[0],bouncyBall); Simulation s(m,c.rules);
             bool hit=false,stillFlying=false;
             for(int n=0;n<90 && !hit;++n) {
@@ -582,6 +594,13 @@ int main(int argc,char** argv) {
             equip(m.fighters[0],findItem(c,"weapon.orbit_shield")); equip(m.fighters[1],findItem(c,"weapon.hammer"));
             Simulation s(m,c.rules); s.match.fighters[0].meleeAngles[0]=0; s.match.fighters[1].meleeAngles[0]=Pi; s.step();
             check(s.match.fighters[1].hitCooldowns[0]>=0.49f,"Orbit Shield did not deflect a grazing Hammer hit");
+        }
+        {
+            Match m=fixture(c); m.fighters[0].position={0,0}; m.fighters[0].previous=m.fighters[0].position; m.fighters[1].position={50,0}; m.fighters[1].previous=m.fighters[1].position;
+            equip(m.fighters[0],findItem(c,"weapon.orbit_shield")); equip(m.fighters[0],findItem(c,"weapon.orbit_shield")); equip(m.fighters[1],findItem(c,"weapon.orbit_shield"));
+            Simulation s(m,c.rules); s.match.fighters[0].meleeAngles[0]=0; s.match.fighters[0].meleeAngles[1]=Pi; s.match.fighters[1].meleeAngles[0]=Pi;
+            s.match.fighters[0].meleeDirections[0]=-1; s.match.fighters[0].meleeDirections[1]=-1; s.step();
+            check(s.match.fighters[0].meleeDirections[0]<0 && s.match.fighters[0].meleeDirections[1]<0,"A paired Orbit Shield should not have its orbit reversed by another shield");
         }
         {
             Match m=fixture(c); m.fighters[0].angle=0.35f;
