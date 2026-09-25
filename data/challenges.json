@@ -551,14 +551,14 @@
     {
       "id": "challenge.ranged_circuit",
       "name": "Arrow Circuit",
-      "description": "A ranged 1v1 against a 103-point Bow and Shuriken fighter with Fast Reload, Power Up and Crit Striker.",
+      "description": "A ranged 1v1 against a 98-point Bow and Boomerang fighter with Fast Reload, Power Up and Crit Striker.",
       "color": "orange",
       "branch": "DUELS · RANGED",
       "prerequisites": ["challenge.first_duel"],
       "unlock_cost": 1500,
       "required_balls": 1,
       "map": {"x": 160, "y": 597},
-      "encounter": {"type": "duel", "arena_id": "arena.rectangle", "arena_effect": "", "time_limit": 90, "objective": {"type": "defeat_all", "target": 1}, "actors": [{"id": "arrow_circuit", "display_name": "ARROW CIRCUIT", "kind": "custom", "team": "enemy", "seed": 53001, "position": [130, 0], "loadout": ["weapon.bow", "weapon.shuriken", "stat.fast_reload", "stat.power", "stat.crit_striker"]}], "arena_objects": []}
+      "encounter": {"type": "duel", "arena_id": "arena.rectangle", "arena_effect": "", "time_limit": 90, "objective": {"type": "defeat_all", "target": 1}, "actors": [{"id": "arrow_circuit", "display_name": "ARROW CIRCUIT", "kind": "custom", "team": "enemy", "seed": 53001, "position": [130, 0], "loadout": ["weapon.bow", "weapon.boomerang", "stat.fast_reload", "stat.power", "stat.crit_striker"]}], "arena_objects": []}
     },
     {
       "id": "challenge.ranged_slinger",

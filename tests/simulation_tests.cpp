@@ -275,7 +275,7 @@ int main(int argc,char** argv) {
             mouseFailure.match.fighters[0].hp=0; mouseFailure.step(); check(mouseFailure.finished && mouseFailure.winner==1,"Mouse Invasion did not fail when the player died");
             Match duel=buildChallengeMatch(c,*challenges.find("challenge.first_duel"),{101},7005);
             check(duel.fighters.size()==2 && duel.fighters[1].name=="RING ACE" && duel.fighters[1].points==85,"The first Duels challenge is not the predefined 85-point fight");
-            for(const auto& [id,points]:std::array<std::pair<std::string,int>,9>{{{"challenge.melee_initiate",97},{"challenge.melee_guard",112},{"challenge.melee_cyclone",124},{"challenge.hybrid_cadet",105},{"challenge.hybrid_duelist",113},{"challenge.hybrid_ronin",131},{"challenge.ranged_circuit",103},{"challenge.ranged_slinger",109},{"challenge.ranged_battery",130}}}) {
+            for(const auto& [id,points]:std::array<std::pair<std::string,int>,9>{{{"challenge.melee_initiate",97},{"challenge.melee_guard",112},{"challenge.melee_cyclone",124},{"challenge.hybrid_cadet",105},{"challenge.hybrid_duelist",113},{"challenge.hybrid_ronin",131},{"challenge.ranged_circuit",98},{"challenge.ranged_slinger",109},{"challenge.ranged_battery",130}}}) {
                 Match specialization=buildChallengeMatch(c,*challenges.find(id),{101},7100); check(specialization.fighters.size()==2 && specialization.fighters[1].points==points,"Duel specialization has the wrong balance-point total");
             }
             Match boss=buildChallengeMatch(c,*challenges.find("challenge.twinblade_titan"),{101,202,303},7006);
