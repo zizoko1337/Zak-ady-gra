@@ -31,18 +31,36 @@ int main(int argc,char** argv) {
     try {
         check(argc==2,"Expected catalog path"); Catalog c=Catalog::load(argv[1]);
         ChallengeCatalog challenges=ChallengeCatalog::load(std::filesystem::path(argv[1]).parent_path()/"challenges.json",c);
-        check(challenges.challenges.size()==9 && challenges.find("challenge.first_spark") && challenges.find("challenge.first_2v2") && challenges.find("challenge.small_beast") && challenges.find("challenge.dps_check") && challenges.find("challenge.first_duel") && challenges.find("challenge.twinblade_titan") && challenges.find("challenge.ricochet_behemoth") && challenges.find("challenge.mouse_invasion") && challenges.find("challenge.dps_check_300"),"Challenge route definitions are missing");
-        check(challenges.find("challenge.first_2v2")->branch=="GROUP FIGHTS" && challenges.find("challenge.small_beast")->branch=="BEASTS" && challenges.find("challenge.dps_check")->branch=="TRIALS" && challenges.find("challenge.first_duel")->branch=="DUELS" && challenges.find("challenge.twinblade_titan")->branch=="BOSSES","Challenge paths are incorrect");
+        check(challenges.challenges.size()==25 && challenges.find("challenge.first_spark") && challenges.find("challenge.first_2v2") && challenges.find("challenge.small_beast") && challenges.find("challenge.skeleton_pair") && challenges.find("challenge.goblin_raiders") && challenges.find("challenge.wolf_pack") && challenges.find("challenge.dps_check") && challenges.find("challenge.first_duel") && challenges.find("challenge.twinblade_titan") && challenges.find("challenge.ricochet_behemoth") && challenges.find("challenge.boss_pufferfish") && challenges.find("challenge.boss_immortale") && challenges.find("challenge.boss_shredder") && challenges.find("challenge.mouse_invasion") && challenges.find("challenge.mouse_stampede") && challenges.find("challenge.dps_check_300") && challenges.find("challenge.dps_check_500") && challenges.find("challenge.dps_check_750") && challenges.find("challenge.dps_check_1000") && challenges.find("challenge.dps_check_1500") && challenges.find("challenge.target_gauntlet") && challenges.find("challenge.target_gauntlet_standard") && challenges.find("challenge.target_gauntlet_swift") && challenges.find("challenge.target_gauntlet_elusive") && challenges.find("challenge.first_dungeon"),"Challenge route definitions are missing");
+        check(challenges.find("challenge.first_2v2")->branch=="GROUP FIGHTS" && challenges.find("challenge.small_beast")->branch=="BEASTS" && challenges.find("challenge.dps_check")->branch=="TRIALS" && challenges.find("challenge.first_duel")->branch=="DUELS" && challenges.find("challenge.twinblade_titan")->branch=="BOSSES" && challenges.find("challenge.first_dungeon")->branch=="DUNGEONS","Challenge paths are incorrect");
         {
             const auto& root=*challenges.find("challenge.first_spark"); float minX=root.mapX,maxX=root.mapX,minY=root.mapY,maxY=root.mapY; int spokes=0;
             for(const auto& challenge:challenges.challenges) if(std::ranges::find(challenge.prerequisites,root.id)!=challenge.prerequisites.end()) {
                 ++spokes; minX=std::min(minX,challenge.mapX); maxX=std::max(maxX,challenge.mapX); minY=std::min(minY,challenge.mapY); maxY=std::max(maxY,challenge.mapY);
             }
-            check(spokes==5 && minX<root.mapX-150 && maxX>root.mapX+150 && minY<root.mapY-150 && maxY>root.mapY+150,"Challenge paths should surround First Spark");
+            check(spokes==6 && minX<root.mapX-150 && maxX>root.mapX+150 && minY<root.mapY-150 && maxY>root.mapY+150,"Challenge paths should surround First Spark");
         }
         check(challenges.find("challenge.first_2v2")->requiredBalls==2 && challenges.find("challenge.dps_check")->objectiveTarget==200 && challenges.find("challenge.dps_check")->timeLimit==60 && challenges.find("challenge.twinblade_titan")->requiredBalls==3,"Challenge objectives are incorrect");
         check(challenges.find("challenge.ricochet_behemoth")->prerequisites==std::vector<std::string>{"challenge.twinblade_titan"} && challenges.find("challenge.ricochet_behemoth")->branch=="BOSSES" && challenges.find("challenge.ricochet_behemoth")->arenaId=="arena.diamond" && challenges.find("challenge.ricochet_behemoth")->requiredBalls==3,"Ricochet Behemoth path or arena is incorrect");
-        check(challenges.find("challenge.mouse_invasion")->prerequisites==std::vector<std::string>{"challenge.dps_check"} && challenges.find("challenge.mouse_invasion")->objectiveType=="survive" && challenges.find("challenge.mouse_invasion")->arenaId=="arena.rectangle" && challenges.find("challenge.dps_check_300")->prerequisites==std::vector<std::string>{"challenge.dps_check"} && challenges.find("challenge.dps_check_300")->objectiveTarget==300,"Trials branches are incorrect");
+        check(challenges.find("challenge.boss_pufferfish")->prerequisites==std::vector<std::string>{"challenge.ricochet_behemoth"} && challenges.find("challenge.boss_immortale")->prerequisites==std::vector<std::string>{"challenge.ricochet_behemoth"} && challenges.find("challenge.boss_shredder")->prerequisites==std::vector<std::string>{"challenge.ricochet_behemoth"},"New bosses should branch from Ricochet Behemoth");
+        check(challenges.find("challenge.mouse_invasion")->prerequisites==std::vector<std::string>{"challenge.dps_check"} && challenges.find("challenge.mouse_invasion")->objectiveType=="survive" && challenges.find("challenge.mouse_invasion")->arenaId=="arena.rectangle" && challenges.find("challenge.mouse_stampede")->prerequisites==std::vector<std::string>{"challenge.mouse_invasion"} && challenges.find("challenge.dps_check_300")->prerequisites==std::vector<std::string>{"challenge.dps_check"} && challenges.find("challenge.dps_check_300")->objectiveTarget==300 && challenges.find("challenge.dps_check_500")->objectiveTarget==500 && challenges.find("challenge.dps_check_750")->objectiveTarget==750 && challenges.find("challenge.dps_check_1000")->objectiveTarget==1000 && challenges.find("challenge.dps_check_1500")->objectiveTarget==1500,"Trials branches are incorrect");
+        check(challenges.find("challenge.target_gauntlet")->prerequisites==std::vector<std::string>{"challenge.dps_check_500"} && challenges.find("challenge.target_gauntlet_standard")->prerequisites==std::vector<std::string>{"challenge.target_gauntlet"} && challenges.find("challenge.target_gauntlet_swift")->prerequisites==std::vector<std::string>{"challenge.target_gauntlet_standard"} && challenges.find("challenge.target_gauntlet_elusive")->prerequisites==std::vector<std::string>{"challenge.target_gauntlet_swift"},"Target Gauntlet stages are not chained correctly");
+        check(challenges.find("challenge.skeleton_pair")->prerequisites==std::vector<std::string>{"challenge.small_beast"} && challenges.find("challenge.skeleton_pair")->requiredBalls==1 && challenges.find("challenge.goblin_raiders")->prerequisites==std::vector<std::string>{"challenge.skeleton_pair"} && challenges.find("challenge.goblin_raiders")->requiredBalls==2 && challenges.find("challenge.wolf_pack")->prerequisites==std::vector<std::string>{"challenge.small_beast"} && challenges.find("challenge.wolf_pack")->requiredBalls==2,"Beast challenge branches are incorrect");
+        {
+            check(dungeonRooms().size()==6 && findDungeonRoom("entrance") && findDungeonRoom("treasure") && findDungeonRoom("monsters") && findDungeonRoom("spikes") && findDungeonRoom("mice") && findDungeonRoom("boss"),"Dungeon room graph is incomplete");
+            check(findDungeonRoom("entrance")->exits.size()==2 && findDungeonRoom("monsters")->exits.size()==3 && findDungeonRoom("boss")->boss,"Dungeon room routes are incorrect");
+            std::vector<Fighter> party={generateBall(c,101),generateBall(c,202),generateBall(c,303)};
+            party[0].hp=37; party[0].cooldowns[0]=1.25f;
+            Match monsterRoom=buildDungeonRoomMatch(c,*findDungeonRoom("monsters"),party,8101);
+            check(monsterRoom.fighters.size()==7 && monsterRoom.fighters[0].hp==37 && monsterRoom.fighters[0].cooldowns[0]==1.25f,"Dungeon party state did not carry into the next room");
+            check(std::ranges::count_if(monsterRoom.fighters,[](const Fighter& fighter){return fighter.actorKind=="skeleton";})==2 && std::ranges::count_if(monsterRoom.fighters,[](const Fighter& fighter){return fighter.actorKind=="wild_dog";})==2,"Dungeon monster room has the wrong enemies");
+            for(const auto& fighter:monsterRoom.fighters) if(fighter.actorKind=="skeleton") check(fighter.maxHp==70 && fighter.effect("bow"),"Skeleton must have 70 HP and one bow");
+            Match bossRoom=buildDungeonRoomMatch(c,*findDungeonRoom("boss"),party,8102);
+            const auto& warden=bossRoom.fighters.back();
+            check(warden.actorKind=="skeleton_boss" && warden.maxHp==400 && std::ranges::count_if(warden.items,[](const Item& item){return item.id=="weapon.bow";})==2 && warden.effect("dodge"),"Bone Warden setup is incorrect");
+            Match mouseRoom=buildDungeonRoomMatch(c,*findDungeonRoom("mice"),party,8103);
+            check(mouseRoom.mouseInvasion.enabled && mouseRoom.mouseInvasion.maxCount==30 && mouseRoom.mouseInvasion.interval==1,"Dungeon mouse room setup is incorrect");
+        }
         check(c.rules.limit==180 && c.rules.suddenDps==0,"Fights should draw after three minutes with no overtime damage");
         check(findItem(c,"weapon.pistol").get("damage")==40,"Heavy Pistol damage should be 40");
         check(findItem(c,"weapon.mines").get("damage")==20,"Minelayer damage should be nerfed to 20");
@@ -190,6 +208,18 @@ int main(int argc,char** argv) {
             Rules beastRules=c.rules; beastRules.limit=10; beastRules.suddenDps=0; Simulation dogFight(beast,beastRules);
             for(int tick=0;tick<245;++tick) dogFight.step();
             check(std::ranges::any_of(dogFight.events,[](const Event& event){ return event.text=="WILD DOG DASH!"; }),"Wild Dog did not dash every two seconds");
+            Match skeletonPair=buildChallengeMatch(c,*challenges.find("challenge.skeleton_pair"),{101},70031);
+            check(skeletonPair.fighters.size()==3 && std::ranges::count_if(skeletonPair.fighters,[](const Fighter& fighter){ return fighter.actorKind=="skeleton"; })==2,"Skeleton Pair did not create two Skeletons");
+            Match goblins=buildChallengeMatch(c,*challenges.find("challenge.goblin_raiders"),{101,202},70032);
+            check(goblins.fighters.size()==6 && std::ranges::count_if(goblins.fighters,[](const Fighter& fighter){
+                auto has=[&](const std::string& id){ return std::ranges::any_of(fighter.items,[&](const Item& item){ return item.id==id; }); };
+                return fighter.actorKind=="goblin" && fighter.maxHp==70 && fighter.radius==12 && has("weapon.poison_dart") && has("weapon.dagger");
+            })==3,"Goblin Raiders have the wrong setup");
+            Match wolves=buildChallengeMatch(c,*challenges.find("challenge.wolf_pack"),{101,202},70033);
+            check(wolves.fighters.size()==5 && std::ranges::count_if(wolves.fighters,[](const Fighter& fighter){ return fighter.actorKind=="dire_wolf" && fighter.maxHp==200 && fighter.contactDamage==20; })==1 && std::ranges::count_if(wolves.fighters,[](const Fighter& fighter){ return fighter.actorKind=="wild_dog"; })==2,"Wolf Pack has the wrong setup");
+            Rules wolfRules=c.rules; wolfRules.limit=10; wolfRules.suddenDps=0; Simulation wolfFight(wolves,wolfRules);
+            for(int tick=0;tick<325;++tick) wolfFight.step();
+            check(std::ranges::any_of(wolfFight.events,[](const Event& event){ return event.text=="DIRE WOLF LEAP!"; }),"Dire Wolf did not use its long leap");
             Match dps=buildChallengeMatch(c,*challenges.find("challenge.dps_check"),{101},7004);
             check(dps.arena.id=="arena.circle" && dps.fighters[1].stationary && dps.fighters[1].harmless && dps.fighters[1].position.x==0 && dps.fighters[1].position.y==0,"DPS Check dummy or arena is incorrect");
             Rules dpsRules=c.rules; dpsRules.limit=60; dpsRules.suddenDps=0; Simulation damageRace(dps,dpsRules);
@@ -202,6 +232,9 @@ int main(int argc,char** argv) {
             Rules dps300Rules=c.rules; dps300Rules.limit=60; dps300Rules.suddenDps=0; Simulation damageRace300(dps300,dps300Rules);
             damageRace300.match.fighters[0].damageDealt=299; damageRace300.step(); check(!damageRace300.finished,"DPS Check: 300 completed below its target");
             damageRace300.match.fighters[0].damageDealt=300; damageRace300.step(); check(damageRace300.finished && damageRace300.winner==0,"DPS Check: 300 did not complete at 300 damage");
+            for(const auto& [id,target]:std::array<std::pair<std::string,float>,4>{{{"challenge.dps_check_500",500},{"challenge.dps_check_750",750},{"challenge.dps_check_1000",1000},{"challenge.dps_check_1500",1500}}}) {
+                Match dpsTier=buildChallengeMatch(c,*challenges.find(id),{101},70051); check(dpsTier.objectiveTarget==target && dpsTier.fighters[1].stationary && dpsTier.fighters[1].harmless,"High DPS Check setup is incorrect");
+            }
             Match invasion=buildChallengeMatch(c,*challenges.find("challenge.mouse_invasion"),{101},7006);
             check(invasion.mouseInvasion.enabled && invasion.mouseInvasion.interval==1 && invasion.mouseInvasion.maxCount==20 && invasion.mouseInvasion.hp==1 && invasion.mouseInvasion.damage==5,"Mouse Invasion setup is incorrect");
             auto invasionController=std::ranges::find_if(invasion.fighters,[](const Fighter& fighter){ return fighter.actorKind=="mouse_spawner"; });
@@ -213,6 +246,17 @@ int main(int argc,char** argv) {
             check(mouseSurvival.mice.size()==1 && mouseSurvival.mice[0].targetable && mouseSurvival.match.fighters[mouseSurvival.mice[0].owner].team==1,"First invasion mouse is missing or not targetable");
             for(int tick=0;tick<24*120;++tick) mouseSurvival.step();
             check(mouseSurvival.mice.size()==20,"Mouse Invasion did not stop at 20 active mice");
+            Match minionInvasion=buildChallengeMatch(c,*challenges.find("challenge.mouse_invasion"),{101},70060); equip(minionInvasion.fighters[0],minionAbility); Simulation minionMouseFight(minionInvasion,invasionRules);
+            check(minionMouseFight.minions.size()==1,"Pocket Minion did not spawn before the first invasion mouse");
+            Match stampede=buildChallengeMatch(c,*challenges.find("challenge.mouse_stampede"),{101},70061);
+            check(stampede.mouseInvasion.enabled && stampede.mouseInvasion.interval==0.5f && stampede.mouseInvasion.maxCount==50,"Mouse Stampede setup is incorrect");
+            Match heavyTargets=buildChallengeMatch(c,*challenges.find("challenge.target_gauntlet"),{101},70062);
+            check(heavyTargets.targetWaves.enabled && heavyTargets.targetWaves.targetsPerPhase==10 && heavyTargets.targetWaves.phaseCount==1 && heavyTargets.targetWaves.startPhase==0 && heavyTargets.objectiveType=="clear_targets" && challenges.find("challenge.target_gauntlet")->timeLimit==45 && heavyTargets.arena.id=="arena.rectangle" && heavyTargets.fighters.size()==11,"Heavy Target Gauntlet setup is incorrect");
+            Simulation targetRun(heavyTargets,invasionRules); check(targetRun.targetWaveTotal==10 && targetRun.activeTargetWave==0 && targetRun.match.fighters[1].hp==1 && targetRun.match.fighters[2].hp==0,"Target Gauntlet did not start with one live target");
+            targetRun.match.fighters[1].hp=0; targetRun.step(); check(!targetRun.finished && targetRun.activeTargetWave==1 && targetRun.match.fighters[2].hp==1 && !targetRun.match.fighters[2].hidden,"Target Gauntlet did not spawn the next target after a kill");
+            Match standardTargets=buildChallengeMatch(c,*challenges.find("challenge.target_gauntlet_standard"),{101},70063),swiftTargets=buildChallengeMatch(c,*challenges.find("challenge.target_gauntlet_swift"),{101},70064);
+            Match elusiveTargets=buildChallengeMatch(c,*challenges.find("challenge.target_gauntlet_elusive"),{101},70065);
+            check(standardTargets.targetWaves.startPhase==1 && challenges.find("challenge.target_gauntlet_standard")->timeLimit==45 && standardTargets.fighters[1].radius==c.rules.radius && standardTargets.fighters[1].speed==c.rules.speed && swiftTargets.targetWaves.startPhase==2 && swiftTargets.fighters[1].radius<c.rules.radius && swiftTargets.fighters[1].speed>c.rules.speed && elusiveTargets.targetWaves.startPhase==3 && elusiveTargets.fighters[1].effect("dodge") && elusiveTargets.fighters[1].effect("careful_steps"),"Target Gauntlet target variants are incorrect");
             while(!mouseSurvival.finished) mouseSurvival.step(); check(mouseSurvival.winner==0,"Surviving Mouse Invasion for 60 seconds did not complete the challenge");
             Match rangedInvasion=buildChallengeMatch(c,*challenges.find("challenge.mouse_invasion"),{101},7007);
             rangedInvasion.fighters[0].items.clear(); rangedInvasion.fighters[0].cooldowns.clear(); rangedInvasion.fighters[0].hitCooldowns.clear(); equip(rangedInvasion.fighters[0],findItem(c,"weapon.bow"));
@@ -248,6 +292,13 @@ int main(int argc,char** argv) {
             Simulation ricochetFight(ricochetBoss,bossRules); const auto& liveBehemoth=ricochetFight.match.fighters.back(); std::vector<float> ballDelays;
             for(size_t slot=0;slot<liveBehemoth.items.size();++slot) if(liveBehemoth.items[slot].id=="weapon.bouncy_ball") ballDelays.push_back(liveBehemoth.cooldowns[slot]);
             std::ranges::sort(ballDelays); check(ballDelays.size()==4 && std::abs(ballDelays[1]-ballDelays[0]-1)<0.01f && std::abs(ballDelays[2]-ballDelays[1]-1)<0.01f && std::abs(ballDelays[3]-ballDelays[2]-1)<0.01f,"Four duplicate Bouncy Balls are not staggered one second apart");
+            auto itemCount=[](const Fighter& fighter,const std::string& id){ return static_cast<int>(std::ranges::count_if(fighter.items,[&](const Item& item){ return item.id==id; })); };
+            Match pufferfishMatch=buildChallengeMatch(c,*challenges.find("challenge.boss_pufferfish"),{101,202,303},7011); const auto& pufferfish=pufferfishMatch.fighters.back();
+            check(pufferfishMatch.arena.effect=="spiked_arena" && pufferfish.name=="BOSS PUFFERFISH" && pufferfish.hp==1000 && itemCount(pufferfish,"weapon.poison_dart")==2 && pufferfish.effect("spiked_skin") && pufferfish.effect("spikes") && itemCount(pufferfish,"stat.slow")==1,"Boss Pufferfish setup is incorrect");
+            Match immortaleMatch=buildChallengeMatch(c,*challenges.find("challenge.boss_immortale"),{101,202,303},7012); const auto& immortale=immortaleMatch.fighters.back();
+            check(immortale.name=="BOSS IMMORTALE" && immortale.hp==1000 && itemCount(immortale,"weapon.orbit_shield")==2 && immortale.effect("regen") && immortale.effect("dodge"),"Boss Immortale setup is incorrect");
+            Match shredderMatch=buildChallengeMatch(c,*challenges.find("challenge.boss_shredder"),{101,202,303},7013); const auto& shredder=shredderMatch.fighters.back();
+            check(shredder.name=="BOSS SHREDDER" && shredder.hp==700 && itemCount(shredder,"weapon.dagger")==2 && itemCount(shredder,"stat.power")==1 && itemCount(shredder,"stat.combo_master")==1 && itemCount(shredder,"stat.fast")==1 && shredder.effect("dash") && itemCount(shredder,"stat.fast_swings")==1,"Boss Shredder setup is incorrect");
         }
         // Relative swept collision: a very fast bullet hits even with both endpoints outside the target.
         {

@@ -196,10 +196,10 @@ ChallengeCatalog ChallengeCatalog::load(const std::filesystem::path& path,const 
     };
     const std::set<std::string> colors={"red","green","blue","purple","yellow","cyan","orange"};
     const std::set<std::string> encounters={"duel","survival","damage_race","boss","teamfight","beast_hunt"};
-    const std::set<std::string> objectives={"defeat_all","survive","deal_damage","protect","reach_zone"};
+    const std::set<std::string> objectives={"defeat_all","survive","deal_damage","clear_targets","protect","reach_zone"};
     const std::set<std::string> actorKinds={"generated_fighter","boss","beast","custom","dummy"};
     const std::set<std::string> teams={"enemy","ally","neutral"};
-    const std::set<std::string> objectKinds={"mine","spike","healing_zone","damage_zone","wall","spawn_zone","mouse_spawner"};
+    const std::set<std::string> objectKinds={"mine","spike","healing_zone","damage_zone","wall","spawn_zone","mouse_spawner","target_wave"};
     for(const auto& entry:root.at("challenges")) {
         ChallengeDefinition challenge;
         challenge.id=entry.at("id"); challenge.name=entry.at("name"); challenge.description=entry.at("description"); challenge.color=entry.at("color"); challenge.branch=entry.value("branch","Unsorted");
@@ -248,6 +248,61 @@ ChallengeCatalog ChallengeCatalog::load(const std::filesystem::path& path,const 
 const ChallengeDefinition* ChallengeCatalog::find(const std::string& id) const {
     auto found=std::find_if(challenges.begin(),challenges.end(),[&](const ChallengeDefinition& challenge){return challenge.id==id;});
     return found==challenges.end()?nullptr:&*found;
+}
+const std::vector<DungeonRoomDefinition>& dungeonRooms() {
+    static const std::vector<DungeonRoomDefinition> rooms=[] {
+        std::vector<DungeonRoomDefinition> result;
+        auto base=[](const std::string& id,const std::string& name,const std::string& arena,float limit=180) {
+            ChallengeDefinition challenge; challenge.id="dungeon."+id; challenge.name=name; challenge.description=name;
+            challenge.color="red"; challenge.branch="DUNGEONS"; challenge.encounterType="teamfight";
+            challenge.arenaId=arena; challenge.objectiveType="defeat_all"; challenge.objectiveTarget=1;
+            challenge.requiredBalls=3; challenge.timeLimit=limit; return challenge;
+        };
+        auto actor=[](std::string id,std::string name,std::string kind,int count,Vec position) {
+            ChallengeActor value; value.id=std::move(id); value.displayName=std::move(name); value.kind=std::move(kind);
+            value.team="enemy"; value.count=count; value.position=position; return value;
+        };
+
+        DungeonRoomDefinition entrance; entrance.id="entrance"; entrance.name="Dungeon Entrance";
+        entrance.encounter=base(entrance.id,entrance.name,"arena.rectangle"); entrance.entrance=true;
+        entrance.exits={{"WEST","treasure"},{"EAST","monsters"}}; result.push_back(std::move(entrance));
+
+        DungeonRoomDefinition treasure; treasure.id="treasure"; treasure.name="Treasure Vault";
+        treasure.encounter=base(treasure.id,treasure.name,"arena.circle"); treasure.treasure=true;
+        auto chest=actor("treasure_chest","TREASURE CHEST","custom",1,{0,0}); chest.hpMultiplier=2; treasure.encounter.actors.push_back(chest);
+        treasure.exits={{"EAST","entrance"}}; result.push_back(std::move(treasure));
+
+        DungeonRoomDefinition monsters; monsters.id="monsters"; monsters.name="Bone Kennels";
+        monsters.encounter=base(monsters.id,monsters.name,"arena.rectangle");
+        monsters.encounter.actors.push_back(actor("skeleton","SKELETON","beast",2,{120,-80}));
+        monsters.encounter.actors.push_back(actor("wild_dog","WILD DOG","beast",2,{120,80}));
+        monsters.exits={{"WEST","entrance"},{"NORTH","spikes"},{"SOUTH","mice"}}; result.push_back(std::move(monsters));
+
+        DungeonRoomDefinition spikes; spikes.id="spikes"; spikes.name="Thorn Gallery";
+        spikes.encounter=base(spikes.id,spikes.name,"arena.rectangle"); spikes.encounter.arenaEffect="spiked_arena";
+        auto rivals=actor("random_rival","RANDOM RIVAL","generated_fighter",2,{120,0}); rivals.maxPoints=80; spikes.encounter.actors.push_back(rivals);
+        spikes.exits={{"SOUTH","monsters"},{"NORTH","boss"}}; result.push_back(std::move(spikes));
+
+        DungeonRoomDefinition mice; mice.id="mice"; mice.name="Vermin Flood";
+        mice.encounter=base(mice.id,mice.name,"arena.rectangle",60); mice.encounter.encounterType="survival";
+        mice.encounter.objectiveType="survive"; mice.encounter.objectiveTarget=60;
+        auto controller=actor("mouse_invasion_controller","MOUSE INVASION","dummy",1,{900,900}); mice.encounter.actors.push_back(controller);
+        ChallengeArenaObject spawner; spawner.type="spawn_zone"; spawner.params={{"mouse_invasion",1},{"interval",1},{"max_count",30},{"hp",1},{"radius",7},{"speed",165},{"damage",5},{"bite_cooldown",2}};
+        mice.encounter.arenaObjects.push_back(spawner); mice.exits={{"NORTH","monsters"}}; result.push_back(std::move(mice));
+
+        DungeonRoomDefinition boss; boss.id="boss"; boss.name="The Bone Warden";
+        boss.encounter=base(boss.id,boss.name,"arena.octagon",180); boss.encounter.encounterType="boss"; boss.boss=true;
+        auto warden=actor("skeleton_boss","BONE WARDEN","boss",1,{105,0}); warden.hpMultiplier=4; warden.sizeMultiplier=1.35f;
+        warden.loadout={"weapon.bow","weapon.bow","ability.dodge"}; boss.encounter.actors.push_back(warden);
+        boss.exits={{"SOUTH","spikes"}}; result.push_back(std::move(boss));
+        return result;
+    }();
+    return rooms;
+}
+const DungeonRoomDefinition* findDungeonRoom(const std::string& id) {
+    const auto& rooms=dungeonRooms();
+    auto found=std::find_if(rooms.begin(),rooms.end(),[&](const DungeonRoomDefinition& room){ return room.id==id; });
+    return found==rooms.end()?nullptr:&*found;
 }
 const Item* Fighter::effect(const std::string& value) const {
     for(const auto& i:items) if(i.effect==value) return &i;
@@ -389,6 +444,12 @@ Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,
         require(match.mouseInvasion.interval>=0.1f && match.mouseInvasion.interval<=60 && match.mouseInvasion.maxCount>=1 && match.mouseInvasion.maxCount<=120,"Invalid Mouse Invasion spawn rate or limit.");
         require(match.mouseInvasion.hp>0 && match.mouseInvasion.hp<=10000 && match.mouseInvasion.radius>=2 && match.mouseInvasion.radius<=40 && match.mouseInvasion.speed>0 && match.mouseInvasion.speed<=1000 && match.mouseInvasion.damage>=0 && match.mouseInvasion.damage<=1000 && match.mouseInvasion.biteCooldown>=0.1f && match.mouseInvasion.biteCooldown<=60,"Invalid Mouse Invasion mouse stats.");
     }
+    for(const auto& object:challenge.arenaObjects) if(object.type=="target_wave") {
+        auto value=[&](const std::string& key,float fallback) { auto found=object.params.find(key); return found==object.params.end()?fallback:found->second; };
+        require(!match.targetWaves.enabled,"A challenge can only define one target-wave controller.");
+        match.targetWaves.enabled=true; match.targetWaves.targetsPerPhase=static_cast<int>(std::lround(value("targets_per_phase",10))); match.targetWaves.phaseCount=static_cast<int>(std::lround(value("phase_count",1))); match.targetWaves.startPhase=static_cast<int>(std::lround(value("start_phase",0)));
+        require(match.targetWaves.targetsPerPhase>=1 && match.targetWaves.targetsPerPhase<=30 && match.targetWaves.phaseCount>=1 && match.targetWaves.phaseCount<=4 && match.targetWaves.startPhase>=0 && match.targetWaves.startPhase+match.targetWaves.phaseCount<=4,"Invalid target-wave setup.");
+    }
     std::mt19937 rng(encounterSeed);
     const std::array<std::string,12> rivalNames={"ASH","BOLT","CLAW","DUSK","ECHO","FANG","HEX","MOSS","ROOK","SCAR","TALON","VOID"};
     for(size_t index=0;index<playerSeeds.size();++index) {
@@ -407,12 +468,39 @@ Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,
             int attempts=0;
             do { fighter=generateBall(c,seed); if(actor.maxPoints<=0 || fighter.points<=actor.maxPoints) break; seed=rng(); } while(++attempts<10000);
             require(actor.maxPoints<=0 || fighter.points<=actor.maxPoints,"Could not generate a challenge opponent inside its point limit.");
+        } else if(actor.kind=="dummy" && actor.id=="target_wave") {
+            require(match.targetWaves.enabled,"Target-wave actor requires a target-wave controller.");
+            int phase=match.targetWaves.startPhase+copy/match.targetWaves.targetsPerPhase;
+            require(phase<match.targetWaves.startPhase+match.targetWaves.phaseCount,"Target-wave actor count exceeds its configured phases.");
+            fighter.actorKind="wave_target"; fighter.harmless=true; fighter.contactDamage=0;
+            fighter.name=phase==0?"HEAVY TARGET":phase==1?"TARGET":phase==2?"QUICK TARGET":"ELUSIVE TARGET";
+            fighter.title=phase==0?"the Slow":phase==1?"the Plain":phase==2?"the Swift":"the Untouchable";
+            auto addItem=[&](const std::string& id) { auto item=std::find_if(c.items.begin(),c.items.end(),[&](const Item& value){ return value.id==id; }); require(item!=c.items.end(),"Target-wave loadout item is missing."); fighter.items.push_back(*item); };
+            if(phase==0) { addItem("stat.slow"); addItem("stat.large"); }
+            else if(phase==2 || phase==3) { addItem("stat.small"); addItem("stat.fast"); if(phase==3) { addItem("ability.dodge"); addItem("ability.careful_steps"); } }
+            prepareFighter(fighter,c); fighter.maxHp=1; fighter.hp=copy==0?1:0;
+            fighter.hidden=copy!=0; fighter.physicsDisabled=copy!=0;
         } else if(actor.kind=="dummy") {
             fighter.name="DAMAGE DUMMY"; fighter.title="the Unmoving"; fighter.actorKind="dummy"; fighter.stationary=true; fighter.harmless=true;
             fighter.maxHp=fighter.hp=100000; fighter.speed=0; fighter.radius=28; fighter.contactDamage=0;
         } else if(actor.kind=="beast" && actor.id=="wild_dog") {
             fighter.name="WILD DOG"; fighter.title="the Small Beast"; fighter.actorKind="wild_dog";
             fighter.maxHp=fighter.hp=120; fighter.speed=165; fighter.radius=20; fighter.contactDamage=10; fighter.specialCooldown=2;
+        } else if(actor.kind=="beast" && actor.id=="dire_wolf") {
+            fighter.name="DIRE WOLF"; fighter.title="the Long Leap"; fighter.actorKind="dire_wolf";
+            fighter.maxHp=fighter.hp=200; fighter.speed=185; fighter.radius=25; fighter.contactDamage=20; fighter.specialCooldown=2.6f;
+        } else if(actor.kind=="beast" && actor.id=="skeleton") {
+            fighter.name="SKELETON"; fighter.title="the Rattling Archer"; fighter.actorKind="skeleton";
+            auto bow=std::find_if(c.items.begin(),c.items.end(),[](const Item& value){ return value.id=="weapon.bow"; });
+            require(bow!=c.items.end(),"Skeleton requires weapon.bow."); fighter.items.push_back(*bow); prepareFighter(fighter,c);
+            fighter.maxHp=fighter.hp=70; fighter.speed=155; fighter.radius=18;
+        } else if(actor.kind=="beast" && actor.id=="goblin") {
+            fighter.name="GOBLIN"; fighter.title="the Venomous"; fighter.actorKind="goblin";
+            for(const auto& id:{"weapon.poison_dart","weapon.dagger"}) {
+                auto item=std::find_if(c.items.begin(),c.items.end(),[&](const Item& value){ return value.id==id; });
+                require(item!=c.items.end(),"Goblin loadout item is missing."); fighter.items.push_back(*item);
+            }
+            prepareFighter(fighter,c); fighter.maxHp=fighter.hp=70; fighter.speed=180; fighter.radius=12;
         } else {
             fighter.actorKind=actor.kind=="custom"?"fighter":actor.kind;
             for(const auto& id:actor.loadout) {
@@ -421,6 +509,9 @@ Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,
             }
             prepareFighter(fighter,c);
         }
+        if(actor.id=="treasure_chest") {
+            fighter.actorKind="treasure_chest"; fighter.title="the Sealed"; fighter.stationary=true; fighter.harmless=true; fighter.contactDamage=0;
+        } else if(actor.id=="skeleton_boss") fighter.actorKind="skeleton_boss";
         if(actor.id=="mouse_invasion_controller") {
             fighter.name="MOUSE INVASION"; fighter.title="the Swarm"; fighter.actorKind="mouse_spawner";
             fighter.stationary=false; fighter.harmless=true; fighter.hidden=true; fighter.untargetable=true; fighter.speed=900; fighter.radius=1;
@@ -432,6 +523,7 @@ Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,
         fighter.damageMultiplier*=actor.damageMultiplier; fighter.radius*=actor.sizeMultiplier;
         float fallbackY=(enemyIndex-(static_cast<int>(challenge.actors.size())-1)*0.5f)*90.0f;
         fighter.position=actor.id=="mouse_invasion_controller"?Vec{}:actor.position;
+        if(fighter.actorKind=="wave_target" && fighter.hidden) fighter.position={2000.0f+copy*10.0f,2000.0f};
         if(length(fighter.position)<0.01f && !fighter.stationary) fighter.position={130.0f,fallbackY};
         if(actor.count>1) fighter.position.y+=(copy-(actor.count-1)*0.5f)*80.0f;
         fighter.previous=fighter.position;
@@ -439,7 +531,36 @@ Match buildChallengeMatch(const Catalog& c,const ChallengeDefinition& challenge,
         for(size_t slot=0;slot<fighter.items.size();++slot) fighter.cooldowns[slot]=fighter.items[slot].get("cooldown",1)*std::uniform_real_distribution<float>(0.25f,0.65f)(rng);
         match.fighters.push_back(std::move(fighter)); ++enemyIndex;
     }
+    if(match.targetWaves.enabled) {
+        int targets=static_cast<int>(std::ranges::count_if(match.fighters,[](const Fighter& fighter){ return fighter.actorKind=="wave_target"; }));
+        require(targets==match.targetWaves.targetsPerPhase*match.targetWaves.phaseCount,"Target-wave actor count does not match its controller.");
+    }
     require(!match.fighters.empty() && (match.mouseInvasion.enabled || std::ranges::any_of(match.fighters,[](const Fighter& fighter){ return fighter.team==1; })),"Challenge requires an enemy actor or arena invasion.");
+    return match;
+}
+Match buildDungeonRoomMatch(const Catalog& c,const DungeonRoomDefinition& room,const std::vector<Fighter>& party,uint32_t encounterSeed) {
+    require(!party.empty(),"A dungeon room requires at least one surviving party member.");
+    ChallengeDefinition encounter=room.encounter; encounter.requiredBalls=static_cast<int>(party.size());
+    Match match;
+    if(room.entrance) {
+        match.seed=encounterSeed; match.challenge=true; match.challengeId=encounter.id;
+        match.objectiveType="defeat_all"; match.objectiveTarget=0;
+        auto arena=std::find_if(c.arenas.begin(),c.arenas.end(),[&](const Arena& value){ return value.id==encounter.arenaId; });
+        require(arena!=c.arenas.end(),"Dungeon entrance arena does not exist."); match.arena=*arena;
+        match.fighters=party;
+    } else {
+        std::vector<uint32_t> seeds; seeds.reserve(party.size());
+        for(const auto& fighter:party) seeds.push_back(fighter.appearanceSeed);
+        match=buildChallengeMatch(c,encounter,seeds,encounterSeed);
+        for(size_t index=0;index<party.size();++index) match.fighters[index]=party[index];
+    }
+    std::mt19937 rng(encounterSeed^0x44554E47u);
+    for(size_t index=0;index<party.size();++index) {
+        auto& fighter=match.fighters[index]; fighter.team=0; fighter.actorKind="fighter"; fighter.physicsDisabled=false; fighter.preserveCooldowns=true;
+        fighter.position={-145.0f,(static_cast<float>(index)-(party.size()-1)*0.5f)*82.0f}; fighter.previous=fighter.position;
+        float angle=std::uniform_real_distribution<float>(-0.55f,0.55f)(rng);
+        fighter.velocity={std::cos(angle)*fighter.speed,std::sin(angle)*fighter.speed}; fighter.angle=angle;
+    }
     return match;
 }
 int marketPrice(const Fighter& fighter) {
@@ -489,6 +610,11 @@ Simulation::Simulation(const Match& m,const Rules& r):match(m),rules(r) {
         invasionMouseTimer=match.mouseInvasion.interval;
     }
     bodies.resize(match.fighters.size()); damageFields.resize(match.fighters.size());
+    for(int index=0;index<static_cast<int>(match.fighters.size());++index) if(match.fighters[index].actorKind=="wave_target") targetWaveIndices.push_back(index);
+    if(match.targetWaves.enabled) {
+        require(static_cast<int>(targetWaveIndices.size())==match.targetWaves.targetsPerPhase*match.targetWaves.phaseCount,"Target-wave actor count does not match its controller.");
+        targetWaveTotal=static_cast<int>(targetWaveIndices.size());
+    }
     contactCooldowns.assign(match.fighters.size()*match.fighters.size(),0);
     auto wd=b2DefaultWorldDef(); wd.gravity={0,0}; wd.enableSleep=false; wd.restitutionThreshold=0;
     world=b2CreateWorld(&wd);
@@ -514,7 +640,7 @@ Simulation::Simulation(const Match& m,const Rules& r):match(m),rules(r) {
             } else if(item.category=="weapon") {
                 if(auto first=rangedCopies.find(item.id); first!=rangedCopies.end()) {
                     int copyNumber=++first->second.second;
-                    f.cooldowns[n]=f.cooldowns[first->second.first]+static_cast<float>(copyNumber);
+                    if(!f.preserveCooldowns) f.cooldowns[n]=f.cooldowns[first->second.first]+static_cast<float>(copyNumber);
                 } else rangedCopies.emplace(item.id,std::pair<size_t,int>{n,0});
             }
         }
@@ -523,10 +649,27 @@ Simulation::Simulation(const Match& m,const Rules& r):match(m),rules(r) {
         bodies[k]=b2CreateBody(world,&bd); b2Circle circle{{0,0},f.radius/40}; sd.density=1;
         if(!f.untargetable) b2CreateCircleShape(bodies[k],&sd,&circle);
     }
+    if(match.targetWaves.enabled && !targetWaveIndices.empty()) {
+        auto& target=match.fighters[targetWaveIndices.front()];
+        float minX=match.arena.vertices.front().x,maxX=minX,minY=match.arena.vertices.front().y,maxY=minY;
+        for(Vec vertex:match.arena.vertices) { minX=std::min(minX,vertex.x); maxX=std::max(maxX,vertex.x); minY=std::min(minY,vertex.y); maxY=std::max(maxY,vertex.y); }
+        Vec spawn=target.position; uint32_t salt=1;
+        for(int attempt=0;attempt<64;++attempt) {
+            uint32_t rx=mix32(match.seed^salt*0x9e3779b9u^static_cast<uint32_t>(attempt*193));
+            uint32_t ry=mix32(match.seed^salt*0x85ebca6bu^static_cast<uint32_t>(attempt*389));
+            Vec candidate{minX+(maxX-minX)*static_cast<float>(rx&0xffffu)/65535.0f,minY+(maxY-minY)*static_cast<float>(ry&0xffffu)/65535.0f};
+            if(pointInPolygon(candidate,match.arena.vertices)) { spawn=candidate; break; }
+        }
+        uint32_t direction=mix32(match.seed^salt*0xc2b2ae35u); float angle=static_cast<float>(direction&0xffffu)/65535.0f*2*Pi;
+        target.position=target.previous=spawn; target.velocity={std::cos(angle)*target.speed,std::sin(angle)*target.speed}; target.angle=angle;
+        b2Body_SetTransform(bodies[targetWaveIndices.front()],physics(spawn),b2Rot_identity); b2Body_SetLinearVelocity(bodies[targetWaveIndices.front()],physics(target.velocity));
+    }
     for(int k=0;k<static_cast<int>(match.fighters.size());++k) if(const auto* helper=match.fighters[k].effect("minion")) {
         auto& owner=match.fighters[k]; Item weapon=owner.minionWeapon.id.empty()?fallbackMinionWeapon(match.seed,k):owner.minionWeapon;
-        int target=closestEnemy(static_cast<int>(k),owner.position); if(target<0) continue;
-        Vec forward=normalized(match.fighters[target].position-owner.position),side{-forward.y,forward.x};
+        int target=closestEnemy(static_cast<int>(k),owner.position);
+        Vec forward=target>=0?normalized(match.fighters[target].position-owner.position):normalized(owner.velocity);
+        if(length(forward)<0.01f) forward={1,0};
+        Vec side{-forward.y,forward.x};
         float offset=(mix32(match.seed^static_cast<uint32_t>(k*419))&1u)?1.0f:-1.0f;
         Vec p=owner.position+side*offset*(owner.radius+helper->get("radius")+8);
         Minion minion;
@@ -566,11 +709,13 @@ void Simulation::damage(int victim,float amount,int source,const std::string& la
     bool critical=canCrit && criticalHit(source);
     if(source>=0) {
         const auto& attacker=match.fighters[source]; amount*=attacker.damageMultiplier;
+        if(attacker.potionDamageTime>0) amount*=1.5f;
         if(attacker.hp<attacker.maxHp*0.2f && hasItem(attacker,"stat.berserk")) amount*=2;
         if(attacker.effect("combo_master") && attacker.comboWindow>0 && label.find("Poison")==std::string::npos) amount*=1.3f;
     }
     if(critical) amount*=2;
-    amount*=1-f.armor;
+    float effectiveArmor=f.potionArmorTime>0?std::min(0.9f,f.armor+0.5f):f.armor;
+    amount*=1-effectiveArmor;
     float blocked=std::min(f.shield,amount); f.shield-=blocked; amount-=blocked;
     if(blocked>0.1f) log(victim,"BLOCKED · "+std::to_string(static_cast<int>(std::ceil(blocked))),Cue::Shield,f.position);
     amount=std::min(f.hp,amount); f.hp-=amount; f.flash=0.15f;
@@ -658,6 +803,28 @@ void Simulation::step() {
     std::erase_if(bursts,[](const Burst& b){return b.life<=0;});
     for(auto& shape:fieldShapes) shape.life-=Step;
     std::erase_if(fieldShapes,[](const FieldShape& shape){return shape.life<=0;});
+    if(match.targetWaves.enabled && activeTargetWave<targetWaveTotal && match.fighters[targetWaveIndices[activeTargetWave]].hp<=0) {
+        ++activeTargetWave;
+        if(activeTargetWave<targetWaveTotal) {
+            auto& target=match.fighters[targetWaveIndices[activeTargetWave]];
+            float minX=match.arena.vertices.front().x,maxX=minX,minY=match.arena.vertices.front().y,maxY=minY;
+            for(Vec vertex:match.arena.vertices) { minX=std::min(minX,vertex.x); maxX=std::max(maxX,vertex.x); minY=std::min(minY,vertex.y); maxY=std::max(maxY,vertex.y); }
+            Vec spawn{}; uint32_t salt=static_cast<uint32_t>(activeTargetWave+1);
+            for(int attempt=0;attempt<64;++attempt) {
+                uint32_t rx=mix32(match.seed^salt*0x9e3779b9u^static_cast<uint32_t>(attempt*193));
+                uint32_t ry=mix32(match.seed^salt*0x85ebca6bu^static_cast<uint32_t>(attempt*389));
+                Vec candidate{minX+(maxX-minX)*static_cast<float>(rx&0xffffu)/65535.0f,minY+(maxY-minY)*static_cast<float>(ry&0xffffu)/65535.0f};
+                bool clear=pointInPolygon(candidate,match.arena.vertices);
+                for(size_t edge=0;edge<match.arena.vertices.size() && clear;++edge) if(segmentDistance(candidate,match.arena.vertices[edge],match.arena.vertices[(edge+1)%match.arena.vertices.size()])<target.radius+3) clear=false;
+                for(const auto& fighter:match.fighters) if(clear && fighter.team==0 && fighter.hp>0 && length(candidate-fighter.position)<target.radius+fighter.radius+12) clear=false;
+                if(clear) { spawn=candidate; break; }
+            }
+            uint32_t direction=mix32(match.seed^salt*0xc2b2ae35u); float angle=static_cast<float>(direction&0xffffu)/65535.0f*2*Pi;
+            target.hp=target.maxHp=1; target.hidden=false; target.physicsDisabled=false; target.position=target.previous=spawn; target.velocity={std::cos(angle)*target.speed,std::sin(angle)*target.speed}; target.angle=angle;
+            b2Body_SetTransform(bodies[targetWaveIndices[activeTargetWave]],physics(spawn),b2Rot_identity); b2Body_SetLinearVelocity(bodies[targetWaveIndices[activeTargetWave]],physics(target.velocity));
+            bursts.push_back({spawn,0.3f,0.3f,20,targetWaveIndices[activeTargetWave],""}); log(-1,"TARGET "+std::to_string(activeTargetWave+1)+" / "+std::to_string(targetWaveTotal),Cue::None,spawn);
+        }
+    }
     if(match.mouseInvasion.enabled && invasionMouseOwner>=0) {
         invasionMouseTimer-=Step;
         if(invasionMouseTimer<=0) {
@@ -687,6 +854,10 @@ void Simulation::step() {
     }
     for(int k=0;k<static_cast<int>(match.fighters.size());++k) {
         auto& f=match.fighters[k]; f.previous=f.position; f.flash=std::max(0.0f,f.flash-Step);
+        if(f.hp>0 && f.potionRegenTime>0) f.hp=std::min(f.maxHp,f.hp+10*Step);
+        f.potionRegenTime=std::max(0.0f,f.potionRegenTime-Step);
+        f.potionArmorTime=std::max(0.0f,f.potionArmorTime-Step);
+        f.potionDamageTime=std::max(0.0f,f.potionDamageTime-Step);
         f.wallCooldown-=Step; f.boostTime-=Step; f.invulnerable=std::max(0.0f,f.invulnerable-Step);
         f.comboWindow=std::max(0.0f,f.comboWindow-Step);
         f.shieldTime-=Step; if(f.shieldTime<=0) f.shield=0;
@@ -732,9 +903,13 @@ void Simulation::step() {
                 }
             }
         }
-        if(f.actorKind=="wild_dog") {
+        if(f.actorKind=="wild_dog" || f.actorKind=="dire_wolf") {
             f.specialCooldown-=Step;
-            if(f.specialCooldown<=0) { int target=closestEnemy(static_cast<int>(k),f.position); if(target>=0) { f.velocity=normalized(match.fighters[target].position-f.position)*f.speed; f.boostTime=0.32f; f.boostMultiplier=2.7f; f.specialCooldown+=2; log(static_cast<int>(k),"WILD DOG DASH!",Cue::Dash,f.position); } }
+            if(f.specialCooldown<=0) { int target=closestEnemy(static_cast<int>(k),f.position); if(target>=0) {
+                bool wolf=f.actorKind=="dire_wolf"; f.velocity=normalized(match.fighters[target].position-f.position)*f.speed;
+                f.boostTime=wolf?0.52f:0.32f; f.boostMultiplier=wolf?3.6f:2.7f; f.specialCooldown+=wolf?2.6f:2;
+                log(static_cast<int>(k),wolf?"DIRE WOLF LEAP!":"WILD DOG DASH!",Cue::Dash,f.position);
+            } }
         }
         float targetSpeed=f.speed*(f.boostTime>0?f.boostMultiplier:1)*(f.slowTime>0?f.slowMultiplier:1);
         f.velocity=f.knockbackTime>0?f.knockbackDirection*(f.speed*2.15f):normalized(f.velocity)*targetSpeed;
@@ -1144,8 +1319,8 @@ void Simulation::step() {
         if(a.hp<=0 || b.hp<=0 || a.untargetable || b.untargetable || length(a.position-b.position)>a.radius+b.radius+1.5f || contactCooldowns[contact]>0) continue;
         float toFirst=b.harmless?0:b.contactDamage>=0?b.contactDamage:b.effect("spiked_skin")?10.0f:rules.contactDamage;
         float toSecond=a.harmless?0:a.contactDamage>=0?a.contactDamage:a.effect("spiked_skin")?10.0f:rules.contactDamage;
-        if(toFirst>0) damage(static_cast<int>(first),toFirst,static_cast<int>(second),b.actorKind=="wild_dog"?"Wild Dog collision":b.effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
-        if(toSecond>0) damage(static_cast<int>(second),toSecond,static_cast<int>(first),a.actorKind=="wild_dog"?"Wild Dog collision":a.effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
+        if(toFirst>0) damage(static_cast<int>(first),toFirst,static_cast<int>(second),b.actorKind=="dire_wolf"?"Dire Wolf collision":b.actorKind=="wild_dog"?"Wild Dog collision":b.effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
+        if(toSecond>0) damage(static_cast<int>(second),toSecond,static_cast<int>(first),a.actorKind=="dire_wolf"?"Dire Wolf collision":a.actorKind=="wild_dog"?"Wild Dog collision":a.effect("spiked_skin")?"Spiked Skin":"Collision",Cue::Hit,false);
         contactCooldowns[contact]=0.5f;
     }
     for(size_t projectileIndex=0;projectileIndex<projectiles.size();++projectileIndex) {
@@ -1378,6 +1553,12 @@ void Simulation::checkEnd() {
         float dealt=0; for(const auto& fighter:match.fighters) if(fighter.team==0) dealt+=fighter.damageDealt;
         if(dealt>=match.objectiveTarget) winner=0;
         else if(time>=rules.limit || std::ranges::none_of(match.fighters,[](const Fighter& fighter){ return fighter.team==0 && fighter.hp>0; })) winner=1;
+        else return;
+    } else if(match.challenge && match.objectiveType=="clear_targets") {
+        bool alive=std::ranges::any_of(match.fighters,[](const Fighter& fighter){ return fighter.team==0 && fighter.hp>0; });
+        bool cleared=targetWaveTotal>0 && activeTargetWave>=targetWaveTotal-1 && match.fighters[targetWaveIndices.back()].hp<=0;
+        if(cleared) winner=0;
+        else if(!alive || time>=rules.limit) winner=1;
         else return;
     } else {
         bool alive0=std::ranges::any_of(match.fighters,[](const Fighter& fighter){ return fighter.team==0 && fighter.hp>0; });
