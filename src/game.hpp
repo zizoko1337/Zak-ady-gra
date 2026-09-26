@@ -15,6 +15,7 @@ namespace orbital {
 constexpr float Step = 1.0f / 120.0f;
 constexpr float Pi = 3.14159265358979323846f;
 constexpr float ComboWindow = 2.5f;
+constexpr float GeodeHp = 1000.0f;
 struct Vec {
     float x=0,y=0;
     Vec operator+(Vec b) const { return {x+b.x,y+b.y}; }

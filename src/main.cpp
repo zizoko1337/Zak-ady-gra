@@ -603,7 +603,7 @@ bool ballPopoverActive=false;
             box({x,96,210,700},Panel,Fade(color,0.7f),0.04f); DrawRectangleRounded({x+1,97,208,4},0.5f,6,color);
             text("GEOSTONE",x+16,114,11,color); fitted("SEALED GEODE",x+16,153,178,18);
             Vector2 p{x+105,213}; drawGeode(p,48,f.appearanceSeed,std::clamp(f.hp/f.maxHp,0.0f,1.0f));
-            float hp=std::clamp(f.hp/f.maxHp,0.0f,1.0f); text("INTEGRITY",x+16,280,10,Muted); fitted(number(f.hp)+" / 10,000",x+16,299,165,15,color);
+            float hp=std::clamp(f.hp/f.maxHp,0.0f,1.0f); text("INTEGRITY",x+16,280,10,Muted); fitted(number(f.hp)+" / "+number(GeodeHp),x+16,299,165,15,color);
             DrawRectangleRounded({x+16,325,178,7},1,8,Border); DrawRectangleRounded({x+16,325,178*hp,7},1,8,color);
             text("STATIONARY",x+16,357,10,Muted); text("HARMLESS",x+16,378,10,Muted);
             DrawLineEx({x+16,419},{x+194,419},1,Border); text("CONTENTS",x+16,430,10,Muted);
@@ -1062,7 +1062,7 @@ bool ballPopoverActive=false;
             box({28,810,1384,82},Panel,Border,0.08f); DrawRectangleRounded({29,811,4,80},0.5f,6,Accent);
             text("GEOSTONE RUN",51,821,10,Accent);
             text("UNIQUE SEALED GEODE",51,846,18,White);
-            text(sim&&sim->finished?(sim->winner==0?(openedGeodeReward.coins>0?openedGeodeReward.mineral+"  +"+std::to_string(openedGeodeReward.coins)+" coins":"EMPTY GEODE"):"GEODE STILL INTACT"):"Destroy the 10,000 HP geode to reveal its crystal.",350,840,14,sim&&sim->finished?Accent:Muted);
+            text(sim&&sim->finished?(sim->winner==0?(openedGeodeReward.coins>0?openedGeodeReward.mineral+"  +"+std::to_string(openedGeodeReward.coins)+" coins":"EMPTY GEODE"):"GEODE STILL INTACT"):"Destroy the "+number(GeodeHp)+" HP geode to reveal its crystal.",350,840,14,sim&&sim->finished?Accent:Muted);
             if(sim&&sim->finished) {
                 if(button({1102,825,286,51},"BACK TO GEOSTONES",true,true,Accent,14)) leaveGeostones();
             } else button({1102,825,286,51},countdown.active()?"GET READY...":"BREAKING IN PROGRESS",false,false,Accent,14);
@@ -1402,7 +1402,7 @@ bool ballPopoverActive=false;
         }
         box({28,444,940,396},Panel,Border,0.04f);
         text("CHOOSE YOUR BREAKER",52,466,14,PlayerGreen);
-        text("The ball keeps its current loadout. The geode has 10,000 HP and cannot attack.",52,490,11,Muted);
+        text("The ball keeps its current loadout. The geode has "+number(GeodeHp)+" HP and cannot attack.",52,490,11,Muted);
         for(size_t index=0;index<ownedBallCache.size();++index) {
             const auto& fighter=ownedBallCache[index]; int column=static_cast<int>(index%4),row=static_cast<int>(index/4); float x=52+column*218.0f,y=519+row*91.0f; Rectangle card{x,y,202,76};
             bool chosen=selectedGeodeBreaker==static_cast<int>(index),hover=!inputBlocked && inside(card);
