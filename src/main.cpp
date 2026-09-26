@@ -238,6 +238,14 @@ bool ballPopoverActive=false;
             wallet.geodes.push_back({seed,false,false});
         }
     }
+    void refreshGeodes() {
+        if(std::ranges::any_of(wallet.geodes,[](const Geode& geode){ return geode.purchased && !geode.opened; })) {
+            error="A paid geode is still waiting to be broken. Finish it before refreshing the shop.";
+            return;
+        }
+        wallet.geodes.clear(); ensureGeodes(); selectedGeode=-1;
+        persist(); if(audioBank) audioBank->play(Cue::Click);
+    }
     void ensureChallengeRoots() {
         for(const auto& challenge:challenges.challenges) if(challenge.prerequisites.empty() && !wallet.challengeUnlocked(challenge.id)) wallet.unlockChallenge(challenge);
         selectedChallenge=std::clamp(selectedChallenge,0,static_cast<int>(challenges.challenges.size())-1);
@@ -1386,6 +1394,7 @@ bool ballPopoverActive=false;
         text("Every prize is already locked into its seed before the geode is opened.",28,155,11,Color{108,128,151,255});
         box({28,178,1384,244},Panel,Border,0.04f);
         text("SEALED GEODE SHOP",52,198,14,Accent); text("5 stones / 1,000 coins each",52,221,11,Muted);
+        if(button({1212,194,174,31},"REFRESH  -  FREE",false,true,Accent,9)) refreshGeodes();
         for(size_t index=0;index<wallet.geodes.size();++index) {
             const auto& geode=wallet.geodes[index]; float x=52+static_cast<float>(index)*270,y=248; Rectangle card{x,y,244,148};
             bool chosen=selectedGeode==static_cast<int>(index),available=!geode.opened;
@@ -1427,7 +1436,7 @@ bool ballPopoverActive=false;
         std::string action=ready && wallet.geodes[selectedGeode].purchased?"ENTER THE ARENA":ready?"BUY & BREAK  -  1,000":"SELECT GEODE + BREAKER";
         if(button({1016,761,370,48},action,true,ready && (wallet.geodes[selectedGeode].purchased || wallet.coins>=1000),Accent,12)) startGeode();
         text("Contents stay secret until the geode shatters.",1016,817,10,Muted);
-        text("Geode stock will expand in a later update.",28,895,11,Muted);
+        text("Refresh replaces opened or unbought geodes for free. Paid geodes must be broken first.",28,895,11,Muted);
     }
     void challengesScreen() {
         if(challengeBattleOpen) { challengeBattleScreen(); return; }
