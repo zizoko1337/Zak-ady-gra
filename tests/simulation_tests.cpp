@@ -91,7 +91,7 @@ int main(int argc,char** argv) {
         const auto& hammer=findItem(c,"weapon.hammer");
         check(hammer.points==37 && hammer.meleeClass=="heavy" && hammer.get("damage")==25 && hammer.get("reach")==50 && hammer.get("rotation_speed")==1.5f && hammer.get("hit_cooldown")==1,"Hammer balance values are incorrect");
         check(findItem(c,"weapon.dagger").meleeClass=="light" && findItem(c,"weapon.dagger").get("rotation_speed")>7,"Dagger is missing its fast light-melee setup");
-        check(findItem(c,"weapon.orbit_shield").meleeClass=="heavy" && findItem(c,"weapon.orbit_shield").points==35 && findItem(c,"weapon.orbit_shield").get("rotation_speed")==0.4f && findItem(c,"weapon.katana").get("damage")==findItem(c,"weapon.spear").get("damage"),"Shield or Katana balance setup is incorrect");
+        check(findItem(c,"weapon.orbit_shield").meleeClass=="heavy" && findItem(c,"weapon.orbit_shield").points==35 && findItem(c,"weapon.orbit_shield").get("rotation_speed")==0.6f && findItem(c,"weapon.katana").get("damage")==findItem(c,"weapon.spear").get("damage"),"Shield or Katana balance setup is incorrect");
         const auto& scythe=findItem(c,"weapon.scythe");
         check(scythe.meleeClass=="medium" && scythe.points==40 && scythe.get("damage")==15 && scythe.get("reach")==findItem(c,"weapon.spear").get("reach") && scythe.get("rotation_speed")==findItem(c,"weapon.katana").get("rotation_speed") && scythe.get("lifesteal")==10,"Orbit Scythe balance values are incorrect");
         const auto& bouncyBall=findItem(c,"weapon.bouncy_ball");
@@ -482,13 +482,13 @@ int main(int argc,char** argv) {
             Match m=fixture(c); m.fighters[0].angle=Pi/2; equip(m.fighters[0],findItem(c,"weapon.orbit_shield"));
             Simulation s(m,c.rules); float before=s.match.fighters[0].meleeAngles[0]; s.step();
             float turn=std::abs(std::remainder(s.match.fighters[0].meleeAngles[0]-before,2*Pi));
-            check(turn>0.003f && turn<0.0035f,"A single Orbit Shield did not slowly track its nearest opponent");
+            check(turn>0.0048f && turn<0.0052f,"A single Orbit Shield did not slowly track its nearest opponent");
         }
         {
             Match m=fixture(c); m.fighters[0].angle=Pi/2; equip(m.fighters[0],findItem(c,"weapon.orbit_shield")); equip(m.fighters[0],findItem(c,"stat.fast_swings"));
             Simulation s(m,c.rules); float before=s.match.fighters[0].meleeAngles[0]; s.step();
             float turn=std::abs(std::remainder(s.match.fighters[0].meleeAngles[0]-before,2*Pi));
-            check(turn>0.0042f && turn<0.0048f,"Faster Swings should modestly improve single-shield tracking");
+            check(turn>0.0064f && turn<0.0069f,"Faster Swings should modestly improve single-shield tracking");
         }
         {
             Match m=fixture(c); equip(m.fighters[0],bouncyBall); Simulation s(m,c.rules);
