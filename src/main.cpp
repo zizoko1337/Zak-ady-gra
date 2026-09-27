@@ -24,11 +24,23 @@ constexpr Rectangle ArenaControls{253,744,934,52};
 constexpr float ArenaZoom=1.26f;
 // Temporary economy helper for development. Set this to false to remove the Add 10k button.
 constexpr bool ShowDebugAddCoins=true;
-const Color Background{10,14,22,255},Panel{17,23,34,255},PanelAlt{23,31,44,255};
-const Color Border{40,52,69,255},Muted{135,152,173,255},White{234,241,249,255};
-const Color Accent{211,248,117,255},Cyan{76,217,242,255},Coral{255,126,144,255};
-const Color PlayerGreen{82,224,126,255};
+const Color Background{5,8,19,255},Panel{11,18,34,255},PanelAlt{17,28,48,255};
+const Color Border{39,71,107,255},Muted{139,161,187,255},White{239,247,255,255};
+const Color Accent{207,255,105,255},Cyan{62,229,255,255},Coral{255,94,174,255};
+const Color PlayerGreen{71,239,143,255};
 const Color Team[2]={Cyan,Coral};
+void drawInterfaceBackdrop(float clock) {
+    DrawRectangleGradientV(0,0,Width,Height,Color{7,13,31,255},Background);
+    for(int y=96;y<Height;y+=44) DrawLine(0,y,Width,y,Color{36,68,102,18});
+    for(int x=0;x<Width;x+=56) DrawLine(x,78,x,Height,Color{32,61,96,14});
+    float scan=78+std::fmod(clock*42.0f,static_cast<float>(Height-78));
+    DrawRectangleGradientV(0,static_cast<int>(scan-18),Width,36,Color{10,35,64,0},Color{37,124,163,28});
+    for(int ring=6;ring>0;--ring) {
+        float radius=70.0f+ring*52.0f;
+        DrawCircle(Width-80,84,radius,Fade(Cyan,0.006f*ring));
+        DrawCircle(80,Height-28,radius,Fade(Coral,0.004f*ring));
+    }
+}
 uint32_t geodeVisualHash(uint32_t value) {
     value^=value>>16; value*=0x7feb352du; value^=value>>15; value*=0x846ca68bu; return value^(value>>16);
 }
@@ -67,6 +79,22 @@ void drawSkeletonPortrait(Vector2 center,float radius,bool boss=false) {
 Font uiFont{},displayFont{}; Vector2 mouse{}; bool inputBlocked=false;
 AudioBank* audioBank=nullptr;
 Vector2 point(Vec v) { return {720+v.x,427+v.y}; }
+void drawMeleeTrail(const Fighter& fighter,const Item& item,size_t slot,float angle,Color color,bool active) {
+    if(!active || item.id=="weapon.orbit_shield") return;
+    float direction=slot<fighter.meleeDirections.size()?fighter.meleeDirections[slot]:1.0f;
+    float speed=item.get("rotation_speed",2.0f)*(fighter.effect("fast_swings")?1.7f:1.0f);
+    float arc=std::clamp(0.055f+speed*0.026f,0.10f,0.30f);
+    float width=item.meleeClass=="heavy"?8.5f:item.meleeClass=="medium"?6.5f:5.0f;
+    for(int echo=6;echo>0;--echo) {
+        float fadedAngle=angle-direction*arc*echo;
+        Vec dir{std::cos(fadedAngle),std::sin(fadedAngle)};
+        Vec base=fighter.position+dir*(fighter.radius+5),tip=fighter.position+dir*(fighter.radius+item.get("reach"));
+        float alpha=0.015f+0.025f*(7-echo);
+        DrawLineEx(point(base),point(tip),width*(0.35f+0.06f*(7-echo)),Fade(color,alpha));
+    }
+    float degrees=angle*180/Pi;
+    DrawRing(point(fighter.position),fighter.radius+item.get("reach")-3,fighter.radius+item.get("reach")+3,degrees-direction*arc*6*180/Pi,degrees,18,Fade(color,0.34f));
+}
 std::string number(float value,int decimals=0) { char b[64]; std::snprintf(b,sizeof b,decimals==0?"%.0f":decimals==1?"%.1f":"%.2f",value); return b; }
 // Pixelify is deliberately rendered larger than the old UI face so the compact
 // labels remain readable at the game's native 1440x940 layout.
@@ -688,7 +716,13 @@ bool ballPopoverActive=false;
             DrawLineEx({center.x-radius*0.65f,center.y+radius*0.65f},{center.x+radius*0.65f,center.y-radius*0.65f},1.4f,color);
             DrawCircleV(center,radius*0.25f,White);
         };
-        for(int x=350;x<1100;x+=24) for(int y=170;y<690;y+=24) DrawCircle(x,y,0.8f,Color{28,39,54,255});
+        Vector2 arenaCenter=point({0,0});
+        DrawCircleV(arenaCenter,260,Fade(Cyan,0.018f)); DrawCircleV(arenaCenter,165,Fade(Accent,0.015f));
+        for(int ring=1;ring<=4;++ring) DrawCircleLinesV(arenaCenter,ring*62.0f,Fade(Cyan,0.05f+ring*0.012f));
+        for(int x=350;x<1100;x+=24) for(int y=170;y<690;y+=24) {
+            float pulse=0.35f+0.25f*std::sin(realClock*1.8f+x*0.013f+y*0.009f);
+            DrawCircle(x,y,0.8f,Fade(Color{69,130,177,255},pulse));
+        }
         const auto& vertices=shown.arena.vertices;
         Color wall=sim && catalog.rules.suddenDps>0 && sim->time>=catalog.rules.sudden?Coral:Color{84,106,133,255};
         for(size_t n=0;n<vertices.size();++n) {
@@ -697,7 +731,7 @@ bool ballPopoverActive=false;
         }
         for(size_t n=0;n<vertices.size();++n) {
             Vector2 a=point(vertices[n]),b=point(vertices[(n+1)%vertices.size()]);
-            DrawLineEx(a,b,9,Fade(wall,0.07f)); DrawLineEx(a,b,2,wall);
+            DrawLineEx(a,b,15,Fade(wall,0.045f)); DrawLineEx(a,b,7,Fade(wall,0.16f)); DrawLineEx(a,b,2,wall);
         }
         if(shown.arena.effect=="spiked_arena") {
             for(size_t n=0;n<vertices.size();++n) {
@@ -819,7 +853,11 @@ bool ballPopoverActive=false;
             }
             for(const auto& p:sim->projectiles) {
                 Vec dir=normalized(p.velocity); Color c=combatColor(p.owner);
-                if(p.kind!="shuriken" && p.kind!="bouncy_ball") DrawLineEx(point(p.position-dir*20),point(p.position),p.radius*1.3f,Fade(c,0.45f));
+                DrawCircleV(point(p.position),p.radius+9,Fade(c,0.075f));
+                if(p.kind!="shuriken" && p.kind!="bouncy_ball") {
+                    DrawLineEx(point(p.position-dir*42),point(p.position),p.radius*3.6f,Fade(c,0.06f));
+                    DrawLineEx(point(p.position-dir*26),point(p.position),p.radius*1.5f,Fade(c,0.65f));
+                }
                 if(p.kind=="bow" || p.kind=="poison_dart") { DrawLineEx(point(p.position-dir*12),point(p.position+dir*5),2,p.kind=="poison_dart"?Color{118,226,106,255}:White); Vec side{-dir.y,dir.x}; DrawTriangle(point(p.position+dir*7),point(p.position-dir*1+side*4),point(p.position-dir*1-side*4),c); }
                 else if(p.kind=="shuriken") {
                     // A large four-point throwing star spins independently while it flies.
@@ -878,16 +916,21 @@ bool ballPopoverActive=false;
                 Vec base=f.position+dir*(f.radius+5),tip=f.position+dir*(f.radius+i.get("reach"));
                 if(i.id=="weapon.orbit_shield") {
                     float degrees=a*180/Pi;
+                    if(sim) {
+                        float direction=n<f.meleeDirections.size()?f.meleeDirections[n]:1;
+                        for(int echo=5;echo>0;--echo) DrawRing(p,f.radius+4,f.radius+16,degrees-direction*echo*11,degrees-direction*(echo-1)*11,12,Fade(c,0.035f+echo*0.012f));
+                    }
                     // A wide 120-degree plate hugs the ball and visibly covers one third of it.
-                    DrawRing(p,f.radius+3,f.radius+14,degrees-60,degrees+60,28,Fade(c,0.92f));
+                    DrawRing(p,f.radius+3,f.radius+14,degrees-60,degrees+60,28,Fade(c,0.94f));
                     DrawRingLines(p,f.radius+3,f.radius+14,degrees-60,degrees+60,28,White);
                     Vec edgeA{std::cos(a-Pi/3),std::sin(a-Pi/3)},edgeB{std::cos(a+Pi/3),std::sin(a+Pi/3)};
                     DrawLineEx(point(f.position+edgeA*(f.radius+5)),point(f.position+edgeA*(f.radius+13)),3,White);
                     DrawLineEx(point(f.position+edgeB*(f.radius+5)),point(f.position+edgeB*(f.radius+13)),3,White);
                 } else {
-                    DrawCircleLinesV(p,f.radius+i.get("reach"),Fade(c,0.06f));
+                    drawMeleeTrail(f,i,n,a,c,sim!=nullptr && f.stunTime<=0);
+                    DrawCircleLinesV(p,f.radius+i.get("reach"),Fade(c,0.12f));
                     float width=i.meleeClass=="heavy"?11:i.meleeClass=="medium"?8:6;
-                    DrawLineEx(point(base),point(tip),width,Fade(c,0.2f)); DrawLineEx(point(base),point(tip),width*0.43f,White);
+                    DrawLineEx(point(base),point(tip),width+4,Fade(c,0.11f)); DrawLineEx(point(base),point(tip),width,Fade(c,0.38f)); DrawLineEx(point(base),point(tip),width*0.43f,White);
                     if(i.id=="weapon.scythe") {
                         Vec hook=tip-dir*7,mid=tip+perp*22-dir*3,blade=tip+perp*32-dir*18;
                         DrawLineEx(point(hook),point(mid),width+2,Fade(c,0.95f)); DrawLineEx(point(mid),point(blade),width+2,Fade(c,0.95f));
@@ -929,7 +972,7 @@ bool ballPopoverActive=false;
                     DrawLineEx(point(base),point(tip),1.2f,Fade(c,0.9f));
                 }
             }
-            DrawCircleV(p,f.radius+7,Fade(c,0.09f));
+            DrawCircleV(p,f.radius+15,Fade(c,0.035f)); DrawCircleV(p,f.radius+9,Fade(c,0.10f));
             DrawCircleV({p.x+2,p.y+5},f.radius,Color{4,8,14,200});
             if(f.actorKind=="geode") {
                 float integrity=std::clamp(f.hp/f.maxHp,0.0f,1.0f);
@@ -937,7 +980,11 @@ bool ballPopoverActive=false;
             }
             bool skeleton=f.actorKind=="skeleton" || f.actorKind=="skeleton_boss";
             Color body=skeleton?Color{205,210,205,255}:f.actorKind=="dire_wolf"?Color{92,61,41,255}:f.actorKind=="wild_dog"?Color{145,91,48,255}:f.actorKind=="goblin"?Color{80,184,97,255}:f.actorKind=="treasure_chest"?Color{151,91,38,255}:f.actorKind=="dummy"?Color{137,120,96,255}:f.actorKind=="boss"?Color{255,174,62,255}:c;
-            if(f.actorKind!="geode") DrawCircleV(p,f.radius,f.flash>0?White:Fade(body,f.invulnerable>0?0.4f:1));
+            if(f.actorKind!="geode") {
+                DrawCircleV(p,f.radius,f.flash>0?White:Fade(body,f.invulnerable>0?0.4f:1));
+                DrawCircleV({p.x-f.radius*0.28f,p.y-f.radius*0.32f},f.radius*0.34f,Fade(White,0.13f));
+                DrawCircleLinesV(p,f.radius+1,Fade(White,0.42f));
+            }
             if(f.actorKind=="boss" || f.actorKind=="skeleton_boss") { DrawCircleLinesV(p,f.radius+5,Accent); DrawCircleLinesV(p,f.radius+9,Fade(Coral,0.7f)); }
             if(f.actorKind=="treasure_chest") {
                 DrawRectangleRounded({p.x-f.radius*0.8f,p.y-f.radius*0.45f,f.radius*1.6f,f.radius*1.05f},0.12f,6,body);
@@ -1765,8 +1812,8 @@ bool ballPopoverActive=false;
     }
     void draw() {
         inputBlocked=catalogOpen || rulesOpen || inspectionOpen;
-        hovered=nullptr; ballPopoverActive=false; SetMouseCursor(MOUSE_CURSOR_DEFAULT); ClearBackground(Background);
-        DrawCircle(43,40,12,Accent); DrawCircle(43,40,5,Background);
+        hovered=nullptr; ballPopoverActive=false; SetMouseCursor(MOUSE_CURSOR_DEFAULT); ClearBackground(Background); drawInterfaceBackdrop(realClock);
+        DrawCircle(43,40,19,Fade(Accent,0.07f)); DrawCircle(43,40,14,Fade(Accent,0.23f)); DrawCircle(43,40,12,Accent); DrawCircle(43,40,5,Background);
         text("ORBITAL",65,24,26); text("ODDS",182,24,26,Accent);
         if(button({276,23,92,34},"ARENA",!collectionOpen&&!challengesOpen&&!geostonesOpen,!live()&&!challengeBattleOpen&&!geostoneBattleOpen,Accent,10)) { collectionOpen=false; challengesOpen=false; geostonesOpen=false; inspectionOpen=false; pendingRemove=-1; }
         if(button({376,23,132,34},"MY COLLECTION",collectionOpen,!live()&&!challengeBattleOpen&&!geostoneBattleOpen,Accent,10)) { collectionOpen=true; challengesOpen=false; geostonesOpen=false; catalogOpen=false; rulesOpen=false; }
@@ -1792,7 +1839,7 @@ bool ballPopoverActive=false;
         if constexpr(ShowDebugAddCoins) if(button({1018,24,90,32},"ADD 10K",false,true,Coral,9)) { wallet.coins=std::min(1000000000,wallet.coins+10000); persist(); }
         box({1120,18,292,45},PanelAlt,Border,0.2f);
         DrawCircle(1144,40,7,Accent); text(std::to_string(wallet.coins),1163,25,23,Accent); text("COINS",1348,34,10,Muted);
-        DrawLine(28,77,1412,77,Border);
+        DrawLine(28,77,1412,77,Fade(Cyan,0.32f)); DrawLine(28,78,1412,78,Border);
         if(challengesOpen) challengesScreen();
         else if(collectionOpen) collectionScreen();
         else if(geostonesOpen && !geostoneBattleOpen) geostonesScreen();
