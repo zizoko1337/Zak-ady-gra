@@ -83,17 +83,26 @@ void drawMeleeTrail(const Fighter& fighter,const Item& item,size_t slot,float an
     if(!active || item.id=="weapon.orbit_shield") return;
     float direction=slot<fighter.meleeDirections.size()?fighter.meleeDirections[slot]:1.0f;
     float speed=item.get("rotation_speed",2.0f)*(fighter.effect("fast_swings")?1.7f:1.0f);
-    float arc=std::clamp(0.055f+speed*0.026f,0.10f,0.30f);
-    float width=item.meleeClass=="heavy"?8.5f:item.meleeClass=="medium"?6.5f:5.0f;
-    for(int echo=6;echo>0;--echo) {
-        float fadedAngle=angle-direction*arc*echo;
-        Vec dir{std::cos(fadedAngle),std::sin(fadedAngle)};
-        Vec base=fighter.position+dir*(fighter.radius+5),tip=fighter.position+dir*(fighter.radius+item.get("reach"));
-        float alpha=0.015f+0.025f*(7-echo);
-        DrawLineEx(point(base),point(tip),width*(0.35f+0.06f*(7-echo)),Fade(color,alpha));
+    float sweep=std::clamp(0.42f+speed*0.055f,0.52f,0.92f);
+    constexpr int TailSlices=22,RadialSlices=7;
+    float innerRadius=fighter.radius+5,outerRadius=fighter.radius+item.get("reach");
+    auto trailPoint=[&](float tail,float radial) {
+        float radius=innerRadius+(outerRadius-innerRadius)*radial;
+        // The trail barely lags at the handle and opens into a long sweep at the blade tip.
+        float localSweep=sweep*(0.12f+0.88f*radial);
+        float a=angle-direction*localSweep*tail;
+        return point(fighter.position+Vec{std::cos(a),std::sin(a)}*radius);
+    };
+    for(int tail=0;tail<TailSlices;++tail) {
+        float u0=static_cast<float>(tail)/TailSlices,u1=static_cast<float>(tail+1)/TailSlices;
+        float alpha=0.18f*std::pow(1-u0,1.65f);
+        for(int radial=0;radial<RadialSlices;++radial) {
+            float r0=static_cast<float>(radial)/RadialSlices,r1=static_cast<float>(radial+1)/RadialSlices;
+            Vector2 a=trailPoint(u0,r0),b=trailPoint(u0,r1),c=trailPoint(u1,r1),d=trailPoint(u1,r0);
+            Color shade=Fade(color,alpha*(0.50f+0.50f*r1));
+            DrawTriangle(a,b,c,shade); DrawTriangle(a,c,d,shade);
+        }
     }
-    float degrees=angle*180/Pi;
-    DrawRing(point(fighter.position),fighter.radius+item.get("reach")-3,fighter.radius+item.get("reach")+3,degrees-direction*arc*6*180/Pi,degrees,18,Fade(color,0.34f));
 }
 std::string number(float value,int decimals=0) { char b[64]; std::snprintf(b,sizeof b,decimals==0?"%.0f":decimals==1?"%.1f":"%.2f",value); return b; }
 // Pixelify is deliberately rendered larger than the old UI face so the compact
@@ -918,7 +927,13 @@ bool ballPopoverActive=false;
                     float degrees=a*180/Pi;
                     if(sim) {
                         float direction=n<f.meleeDirections.size()?f.meleeDirections[n]:1;
-                        for(int echo=5;echo>0;--echo) DrawRing(p,f.radius+4,f.radius+16,degrees-direction*echo*11,degrees-direction*(echo-1)*11,12,Fade(c,0.035f+echo*0.012f));
+                        float rearEdge=degrees-direction*60,trailDegrees=34;
+                        for(int slice=0;slice<18;++slice) {
+                            float u0=static_cast<float>(slice)/18,u1=static_cast<float>(slice+1)/18;
+                            float first=rearEdge-direction*trailDegrees*u1,second=rearEdge-direction*trailDegrees*u0;
+                            float start=std::min(first,second),end=std::max(first,second);
+                            DrawRing(p,f.radius+4,f.radius+16,start,end,3,Fade(c,0.15f*std::pow(1-u0,1.5f)));
+                        }
                     }
                     // A wide 120-degree plate hugs the ball and visibly covers one third of it.
                     DrawRing(p,f.radius+3,f.radius+14,degrees-60,degrees+60,28,Fade(c,0.94f));
