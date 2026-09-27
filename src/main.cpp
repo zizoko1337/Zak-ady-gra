@@ -95,7 +95,7 @@ void drawMeleeTrail(const Fighter& fighter,const Item& item,size_t slot,float an
     };
     for(int tail=0;tail<TailSlices;++tail) {
         float u0=static_cast<float>(tail)/TailSlices,u1=static_cast<float>(tail+1)/TailSlices;
-        float alpha=0.18f*std::pow(1-u0,1.65f);
+        float alpha=0.24f*std::pow(1-u0,1.65f);
         for(int radial=0;radial<RadialSlices;++radial) {
             float r0=static_cast<float>(radial)/RadialSlices,r1=static_cast<float>(radial+1)/RadialSlices;
             Vector2 a=trailPoint(u0,r0),b=trailPoint(u0,r1),c=trailPoint(u1,r1),d=trailPoint(u1,r0);
@@ -932,7 +932,7 @@ bool ballPopoverActive=false;
                             float u0=static_cast<float>(slice)/18,u1=static_cast<float>(slice+1)/18;
                             float first=rearEdge-direction*trailDegrees*u1,second=rearEdge-direction*trailDegrees*u0;
                             float start=std::min(first,second),end=std::max(first,second);
-                            DrawRing(p,f.radius+4,f.radius+16,start,end,3,Fade(c,0.15f*std::pow(1-u0,1.5f)));
+                            DrawRing(p,f.radius+4,f.radius+16,start,end,3,Fade(c,0.20f*std::pow(1-u0,1.5f)));
                         }
                     }
                     // A wide 120-degree plate hugs the ball and visibly covers one third of it.
