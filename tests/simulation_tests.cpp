@@ -62,6 +62,15 @@ int main(int argc,char** argv) {
             Match mouseRoom=buildDungeonRoomMatch(c,*findDungeonRoom("mice"),party,8103);
             check(mouseRoom.mouseInvasion.enabled && mouseRoom.mouseInvasion.maxCount==30 && mouseRoom.mouseInvasion.interval==1,"Dungeon mouse room setup is incorrect");
         }
+        {
+            auto first=geodeReward(42817),again=geodeReward(42817);
+            check(first.mineral==again.mineral && first.coins==again.coins && first.tier==again.tier,"A geode reward must be fixed by its seed");
+            std::set<int> geodeTiers;
+            for(uint32_t seed=1;seed<2000;++seed) geodeTiers.insert(geodeReward(seed).tier);
+            check(geodeTiers.size()==8,"Geode reward table should include empty and seven mineral tiers");
+            Match geodeMatch=buildGeodeMatch(c,generateBall(c,9182),42817);
+            check(GeodeHp==1000 && geodeMatch.arena.id=="arena.circle" && geodeMatch.fighters.size()==2 && geodeMatch.fighters[0].team==0 && geodeMatch.fighters[1].actorKind=="geode" && geodeMatch.fighters[1].stationary && geodeMatch.fighters[1].harmless && geodeMatch.fighters[1].maxHp==GeodeHp && geodeMatch.fighters[1].position.x==0 && geodeMatch.fighters[1].position.y==0,"Geode breaking match is configured incorrectly");
+        }
         check(c.rules.limit==180 && c.rules.suddenDps==0,"Fights should draw after three minutes with no overtime damage");
         check(findItem(c,"weapon.pistol").get("damage")==40,"Heavy Pistol damage should be 40");
         check(findItem(c,"weapon.mines").get("damage")==20,"Minelayer damage should be nerfed to 20");
@@ -82,7 +91,7 @@ int main(int argc,char** argv) {
         const auto& hammer=findItem(c,"weapon.hammer");
         check(hammer.points==37 && hammer.meleeClass=="heavy" && hammer.get("damage")==25 && hammer.get("reach")==50 && hammer.get("rotation_speed")==1.5f && hammer.get("hit_cooldown")==1,"Hammer balance values are incorrect");
         check(findItem(c,"weapon.dagger").meleeClass=="light" && findItem(c,"weapon.dagger").get("rotation_speed")>7,"Dagger is missing its fast light-melee setup");
-        check(findItem(c,"weapon.orbit_shield").meleeClass=="heavy" && findItem(c,"weapon.orbit_shield").points==35 && findItem(c,"weapon.orbit_shield").get("rotation_speed")==0.4f && findItem(c,"weapon.katana").get("damage")==findItem(c,"weapon.spear").get("damage"),"Shield or Katana balance setup is incorrect");
+        check(findItem(c,"weapon.orbit_shield").meleeClass=="heavy" && findItem(c,"weapon.orbit_shield").points==35 && findItem(c,"weapon.orbit_shield").get("rotation_speed")==0.6f && findItem(c,"weapon.katana").get("damage")==findItem(c,"weapon.spear").get("damage"),"Shield or Katana balance setup is incorrect");
         const auto& scythe=findItem(c,"weapon.scythe");
         check(scythe.meleeClass=="medium" && scythe.points==40 && scythe.get("damage")==15 && scythe.get("reach")==findItem(c,"weapon.spear").get("reach") && scythe.get("rotation_speed")==findItem(c,"weapon.katana").get("rotation_speed") && scythe.get("lifesteal")==10,"Orbit Scythe balance values are incorrect");
         const auto& bouncyBall=findItem(c,"weapon.bouncy_ball");
@@ -275,9 +284,11 @@ int main(int argc,char** argv) {
             mouseFailure.match.fighters[0].hp=0; mouseFailure.step(); check(mouseFailure.finished && mouseFailure.winner==1,"Mouse Invasion did not fail when the player died");
             Match duel=buildChallengeMatch(c,*challenges.find("challenge.first_duel"),{101},7005);
             check(duel.fighters.size()==2 && duel.fighters[1].name=="RING ACE" && duel.fighters[1].points==85,"The first Duels challenge is not the predefined 85-point fight");
-            for(const auto& [id,points]:std::array<std::pair<std::string,int>,9>{{{"challenge.melee_initiate",97},{"challenge.melee_guard",112},{"challenge.melee_cyclone",124},{"challenge.hybrid_cadet",105},{"challenge.hybrid_duelist",113},{"challenge.hybrid_ronin",131},{"challenge.ranged_circuit",98},{"challenge.ranged_slinger",109},{"challenge.ranged_battery",130}}}) {
+            for(const auto& [id,points]:std::array<std::pair<std::string,int>,9>{{{"challenge.melee_initiate",97},{"challenge.melee_guard",112},{"challenge.melee_cyclone",124},{"challenge.hybrid_cadet",105},{"challenge.hybrid_duelist",113},{"challenge.hybrid_ronin",198},{"challenge.ranged_circuit",98},{"challenge.ranged_slinger",109},{"challenge.ranged_battery",130}}}) {
                 Match specialization=buildChallengeMatch(c,*challenges.find(id),{101},7100); check(specialization.fighters.size()==2 && specialization.fighters[1].points==points,"Duel specialization has the wrong balance-point total");
             }
+            Match venomRonin=buildChallengeMatch(c,*challenges.find("challenge.hybrid_ronin"),{101},7101);
+            check(std::ranges::count_if(venomRonin.fighters[1].items,[](const Item& item){ return item.id=="weapon.katana"; })==2 && std::ranges::count_if(venomRonin.fighters[1].items,[](const Item& item){ return item.id=="weapon.poison_dart"; })==2,"Venom Ronin should carry two Katanas and two Poison Darts");
             Match boss=buildChallengeMatch(c,*challenges.find("challenge.twinblade_titan"),{101,202,303},7006);
             int bossAllies=0,bossEnemies=0; for(const auto& fighter:boss.fighters) (fighter.team==0?bossAllies:bossEnemies)++;
             const Fighter& titan=boss.fighters.back();
@@ -473,13 +484,13 @@ int main(int argc,char** argv) {
             Match m=fixture(c); m.fighters[0].angle=Pi/2; equip(m.fighters[0],findItem(c,"weapon.orbit_shield"));
             Simulation s(m,c.rules); float before=s.match.fighters[0].meleeAngles[0]; s.step();
             float turn=std::abs(std::remainder(s.match.fighters[0].meleeAngles[0]-before,2*Pi));
-            check(turn>0.003f && turn<0.0035f,"A single Orbit Shield did not slowly track its nearest opponent");
+            check(turn>0.0048f && turn<0.0052f,"A single Orbit Shield did not slowly track its nearest opponent");
         }
         {
             Match m=fixture(c); m.fighters[0].angle=Pi/2; equip(m.fighters[0],findItem(c,"weapon.orbit_shield")); equip(m.fighters[0],findItem(c,"stat.fast_swings"));
             Simulation s(m,c.rules); float before=s.match.fighters[0].meleeAngles[0]; s.step();
             float turn=std::abs(std::remainder(s.match.fighters[0].meleeAngles[0]-before,2*Pi));
-            check(turn>0.0042f && turn<0.0048f,"Faster Swings should modestly improve single-shield tracking");
+            check(turn>0.0064f && turn<0.0069f,"Faster Swings should modestly improve single-shield tracking");
         }
         {
             Match m=fixture(c); equip(m.fighters[0],bouncyBall); Simulation s(m,c.rules);

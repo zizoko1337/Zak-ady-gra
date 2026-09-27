@@ -15,6 +15,7 @@ namespace orbital {
 constexpr float Step = 1.0f / 120.0f;
 constexpr float Pi = 3.14159265358979323846f;
 constexpr float ComboWindow = 2.5f;
+constexpr float GeodeHp = 1000.0f;
 struct Vec {
     float x=0,y=0;
     Vec operator+(Vec b) const { return {x+b.x,y+b.y}; }
@@ -123,9 +124,20 @@ struct Match {
     MouseInvasionSetup mouseInvasion;
     TargetWaveSetup targetWaves;
 };
+struct Geode {
+    uint32_t seed=0;
+    bool purchased=false,opened=false;
+};
+struct GeodeReward {
+    std::string mineral;
+    int coins=0;
+    int tier=0;
+};
 Match generateMatch(const Catalog& catalog,uint32_t seed);
 Fighter generateBall(const Catalog& catalog,uint32_t seed);
 Fighter generateMarketBall(const Catalog& catalog,uint32_t seed);
+Match buildGeodeMatch(const Catalog& catalog,const Fighter& breaker,uint32_t geodeSeed);
+GeodeReward geodeReward(uint32_t seed);
 Match buildChallengeMatch(const Catalog& catalog,const ChallengeDefinition& challenge,const std::vector<uint32_t>& playerSeeds,uint32_t encounterSeed,const std::vector<bool>& marketGenerated={});
 Match buildDungeonRoomMatch(const Catalog& catalog,const DungeonRoomDefinition& room,const std::vector<Fighter>& party,uint32_t encounterSeed);
 int marketPrice(const Fighter& fighter);
@@ -228,6 +240,7 @@ struct Wallet {
     std::vector<bool> ownedBallMarketGenerated;
     std::array<uint32_t,3> marketBallSeeds{};
     bool marketInitialized=false;
+    std::vector<Geode> geodes;
     std::vector<std::string> unlockedChallenges,completedChallenges;
     bool place(int side,int amount);
     int settle(int winner,float multiplier);

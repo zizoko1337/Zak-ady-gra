@@ -539,14 +539,14 @@
     {
       "id": "challenge.hybrid_ronin",
       "name": "Venom Ronin",
-      "description": "A hybrid 1v1 against a 131-point Katana and Poison Dart ronin with Fast Reload, Crit Striker, Power Up and Endurance.",
+      "description": "A hybrid 1v1 against a 198-point ronin with two Orbit Katanas, two Poison Darts, Fast Reload, Crit Striker, Power Up and Endurance.",
       "color": "orange",
       "branch": "DUELS · HYBRID",
       "prerequisites": ["challenge.hybrid_duelist"],
       "unlock_cost": 3500,
       "required_balls": 1,
       "map": {"x": 0, "y": 1280},
-      "encounter": {"type": "duel", "arena_id": "arena.diamond", "arena_effect": "", "time_limit": 90, "objective": {"type": "defeat_all", "target": 1}, "actors": [{"id": "venom_ronin", "display_name": "VENOM RONIN", "kind": "custom", "team": "enemy", "seed": 52003, "position": [130, 0], "loadout": ["weapon.katana", "weapon.poison_dart", "stat.fast_reload", "stat.crit_striker", "stat.power", "stat.hp_plus"]}], "arena_objects": []}
+      "encounter": {"type": "duel", "arena_id": "arena.diamond", "arena_effect": "", "time_limit": 90, "objective": {"type": "defeat_all", "target": 1}, "actors": [{"id": "venom_ronin", "display_name": "VENOM RONIN", "kind": "custom", "team": "enemy", "seed": 52003, "position": [130, 0], "loadout": ["weapon.katana", "weapon.katana", "weapon.poison_dart", "weapon.poison_dart", "stat.fast_reload", "stat.crit_striker", "stat.power", "stat.hp_plus"]}], "arena_objects": []}
     },
     {
       "id": "challenge.ranged_circuit",
