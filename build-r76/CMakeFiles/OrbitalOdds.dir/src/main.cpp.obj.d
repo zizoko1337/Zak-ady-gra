@@ -356,4 +356,7 @@ CMakeFiles/OrbitalOdds.dir/src/main.cpp.obj: \
  C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/x86_64-w64-mingw32/bits/basic_file.h \
  C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/x86_64-w64-mingw32/bits/c++io.h \
  C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/fstream.tcc \
- C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/iostream
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/iostream \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/set \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_set.h \
+ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_multiset.h

@@ -178,10 +178,12 @@ CMakeFiles/OrbitalOdds.dir/src/main.cpp.obj: C:/Users/STACJO~1/Desktop/ZAKADY~1/
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_iterator_base_types.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_map.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_multimap.h \
+  C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_multiset.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_numeric.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_pair.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_raw_storage_iter.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_relops.h \
+  C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_set.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_tempbuf.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_tree.h \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_uninitialized.h \
@@ -263,6 +265,7 @@ CMakeFiles/OrbitalOdds.dir/src/main.cpp.obj: C:/Users/STACJO~1/Desktop/ZAKADY~1/
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/random \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/ranges \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/ratio \
+  C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/set \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/span \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/sstream \
   C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/stdexcept \
@@ -540,6 +543,8 @@ C:/Users/STACJO~1/Desktop/ZAKADY~1/vendor/box2d-3.1.0/include/box2d/collision.h:
 
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/debug/assertions.h:
 
+C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_set.h:
+
 C:/Users/STACJO~1/Desktop/ZAKADY~1/vendor/box2d-3.1.0/include/box2d/math_functions.h:
 
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/locale_facets.h:
@@ -669,6 +674,8 @@ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/incl
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/cstring:
 
 C:/Users/STACJO~1/Desktop/ZAKADY~1/vendor/json-3.12.0/include/nlohmann/detail/output/serializer.hpp:
+
+C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/bits/stl_multiset.h:
 
 C:/Users/STACJO~1/Desktop/ZAKADY~1/vendor/json-3.12.0/include/nlohmann/json.hpp:
 
@@ -1084,6 +1091,10 @@ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/pstl
 
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/random:
 
+C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/pthread_unistd.h:
+
+C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/set:
+
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/span:
 
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/include/c++/16.2.0/tr1/beta_function.tcc:
@@ -1171,8 +1182,6 @@ C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/incl
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/locale.h:
 
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/math.h:
-
-C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/pthread_unistd.h:
 
 C:/Users/Stacjonarka/Desktop/Zakłady\ gra/tools/mingw64/x86_64-w64-mingw32/include/sec_api/wconio_s.h:
 

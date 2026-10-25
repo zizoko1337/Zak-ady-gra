@@ -179,10 +179,12 @@ CMakeFiles/OrbitalOdds.dir/src/main.cpp.obj
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_iterator_base_types.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_map.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_multimap.h
+ C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_multiset.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_numeric.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_pair.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_raw_storage_iter.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_relops.h
+ C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_set.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_tempbuf.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_tree.h
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/bits/stl_uninitialized.h
@@ -264,6 +266,7 @@ CMakeFiles/OrbitalOdds.dir/src/main.cpp.obj
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/random
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/ranges
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/ratio
+ C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/set
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/span
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/sstream
  C:/Users/Stacjonarka/Desktop/Zakłady gra/tools/mingw64/include/c++/16.2.0/stdexcept
